@@ -5,8 +5,8 @@ import time          # timing for delta time
 
 #Board Global Variables
 
-BOARD_W = 400
-BOARD_H = 600
+BOARD_W = 600
+BOARD_H = 800
 BACKGROUND_COLOR = 000
 
 def setup():
@@ -471,7 +471,8 @@ class Game:
         if intersection:
             self.localPlayer.BASE_POINT = intersection.y  - self.localPlayer.collider.collider_aura/2
         
-        self.localPlayer.update(dt)
+        if not self.localPlayer.anchored:
+            self.localPlayer.update(dt)
         
         if True:
             return
