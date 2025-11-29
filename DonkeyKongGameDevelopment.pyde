@@ -5,8 +5,8 @@ import time          # timing for delta time
 
 #Board Global Variables
 
-BOARD_W = 600
-BOARD_H = 800
+BOARD_W = int(224*2.5)
+BOARD_H = int(256*2.5)
 BACKGROUND_COLOR = 000
 
 def setup():
@@ -27,7 +27,9 @@ Enum["COLLIDER_TYPE"] = {
 Enum["ENUM_TYPE"] = {
     "PLAYER": 101,
     "PLATFORM": 102,
-    "BARREL": 103
+    "BARREL": 103,
+    "LADDER": 104,
+    "FIRE_SPIRIT": 105
 }
         
 
@@ -255,10 +257,10 @@ class Instance:
         self.position = Vector2(0, 0)
         self.velocity = Vector2(0, 0)
         
-        if EnumType == Enum["ENUM_TYPE"]["PLAYER"] or EnumType == Enum["ENUM_TYPE"]["BARREL"]:
+        if EnumType == Enum["ENUM_TYPE"]["PLAYER"] or EnumType == Enum["ENUM_TYPE"]["BARREL"] or EnumType == Enum["ENUM_TYPE"]["FIRE_SPIRIT"]:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], self.position)
             
-        elif EnumType == Enum["ENUM_TYPE"]["PLATFORM"]:
+        elif EnumType == Enum["ENUM_TYPE"]["PLATFORM"] or EnumType == Enum["ENUM_TYPE"]["LADDER"]:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["LINE"], Ray2(self.position))
 
 class Workspace(Service):
@@ -340,6 +342,50 @@ class Workspace(Service):
                                                     
         return (intersection, target)
     
+class Ladder(Instance):
+    
+    def __init__(self, P=Vector2(0,0), raycast_function=None):
+        Instance.__init__(self, "Ladder", Enum["ENUM_TYPE"]["LADDER"], True, False)
+        self.position = P
+        self.raycast_function = raycast_function
+        self.width = 20
+        self.top_pos = None
+        self.bottom_pos = None
+        self.height = 0
+        self.rect_pos = None
+        def compute_ladder_bounds():
+            if self.raycast_function is None:
+                return
+            #The main jist of this algo is that we take the initial position that can be whenever between the two platforms, then it used the vectorray function to calculate the top edge of the ladder and the bottom part of the ladder so that later we can create a white rectangle.
+            up_origin = Vector2(self.position.x, self.position.y)
+            up_direction = Vector2(0, -1)
+            up_intersection, up_target = self.raycast_function(Ray2(up_origin, up_direction, 10000))
+            
+            #if we can find the up intersection then we set the top position to a up_intersection.
+            if up_intersection:
+                self.top_pos = up_intersection
+            
+            down_origin = Vector2(self.position.x, self.position.y)
+            down_dir = Vector2(0, 1)
+            down_intersection, down_target = self.raycast_function(Ray2(down_origin, down_dir, 10000))
+            
+            #if we can find the down intersection then we set the top position to a up_intersection.
+            if down_intersection:
+                self.bottom_pos = down_intersection
+            
+            #if we can find both of the positions then we calculate the height and change the rectangle_position 
+            if self.top_pos and self.bottom_pos:
+                self.height = abs(self.top_pos.y - self.bottom_pos.y)
+                self.rect_pos = Vector2(self.position.x - self.width/2, self.top_pos.y)
+        compute_ladder_bounds()
+    
+    
+    def display(self):
+        if self.rect_pos and self.height > 0:
+            stroke(255)
+            fill(255)
+            rect(self.rect_pos.x, self.rect_pos.y, self.width, self.height)
+    
 class Barrel(Instance): 
     #The class only takes the initial position as a vector as arguments.
     def __init__(self, P=Vector2(0,0)):
@@ -348,10 +394,10 @@ class Barrel(Instance):
         
         self.position = P
         
-        self.width = 20
-        self.height = 20
+        self.width = 40
+        self.height = 40
         
-        self.collider.l = 10 # diameter / 2
+        self.collider.l = 20 # diameter / 2
         
         #Temporary Variable that we use to check if the player is on the ground.
         self.on_ground = False
@@ -367,13 +413,13 @@ class Barrel(Instance):
     def update(self, dt):
         
         # if reached start point, do something, like blue barrel becomes fire spirit
-        if (self.position - game.startpoint).magnitude() < 20:
+        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
             self.move_direction = None
         
         if self.move_direction == LEFT:
-            self.velocity.x = -50
+            self.velocity.x = -self.speed
         elif self.move_direction == RIGHT:
-            self.velocity.x = 50
+            self.velocity.x = self.speed
         else:
             self.velocity.x = 0
         
@@ -426,8 +472,188 @@ class Barrel(Instance):
             if self.move_direction == RIGHT:
                 self.move_direction = LEFT
     
-    def draw(self):
+    def display(self):
         fill(150, 75, 0)
+        circle(self.position.x, self.position.y, self.height)
+        
+class BlueBarrel(Instance): 
+    #The class only takes the initial position as a vector as arguments.
+    def __init__(self, P=Vector2(0,0)):
+        
+        Instance.__init__(self, "Barrel", Enum["ENUM_TYPE"]["BARREL"], False, True)
+        
+        self.position = P
+        
+        self.width = 30
+        self.height = 30
+        
+        self.collider.l = 15 # diameter / 2
+        
+        #Temporary Variable that we use to check if the player is on the ground.
+        self.on_ground = False
+        #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
+        self.speed = 200
+        self.jump_force  = -180
+        
+        self.move_direction = LEFT
+        
+        self.BASE_POINT = BOARD_H
+        #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
+
+    def update(self, dt):
+        
+        # if reached start point, do something, like blue barrel becomes fire spirit
+        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
+            self.move_direction = None
+        
+        if self.move_direction == LEFT:
+            self.velocity.x = -self.speed
+        elif self.move_direction == RIGHT:
+            self.velocity.x = self.speed
+        else:
+            self.velocity.x = 0
+        
+        #applying the gravity
+        self.velocity.y += game.Workspace.gravity * dt
+        #update position
+        self.position.y += self.velocity.y * dt
+        
+        if self.position.x + self.velocity.x * dt < self.collider.l:
+            self.position.x = self.collider.l
+            self.border_reached()
+            
+        elif self.position.x + self.velocity.x * dt > BOARD_W - self.collider.l:
+            self.position.x = BOARD_W - self.collider.l
+            self.border_reached()
+        else:
+            self.position.x += self.velocity.x * dt
+
+        # ground collision (temporary)
+        if self.position.y + self.height/2 > self.BASE_POINT:
+            self.position.y = self.BASE_POINT - self.height/2
+            self.velocity.y = 0
+            self.on_ground = True
+        else:
+            self.on_ground = False
+            
+        self.collider.position = self.position
+        
+    #helper functions that we use to change  the velocity speed of the player
+    def move_left(self):
+        self.velocity.x = -self.speed
+    
+    def move_right(self):
+        self.velocity.x = self.speed
+    
+    def stop(self):
+        self.velocity.x = 0
+    
+    def jump(self):
+        #temporary jump mechanics
+        if self.on_ground:
+            self.velocity.y += self.jump_force
+            self.on_ground = False
+            
+    def border_reached(self):
+        if self.move_direction == LEFT:
+            self.move_direction = RIGHT
+        
+        else:
+            if self.move_direction == RIGHT:
+                self.move_direction = LEFT
+    
+    def display(self):
+        fill(0, 75, 255)
+        circle(self.position.x, self.position.y, self.height)
+        
+class FireSpirit(Instance): 
+    #The class only takes the initial position as a vector as arguments.
+    def __init__(self, P=Vector2(0,0)):
+        
+        Instance.__init__(self, "FireSpirit", Enum["ENUM_TYPE"]["BARREL"], False, True)
+        
+        self.position = P
+        
+        self.width = 20
+        self.height = 20
+        
+        self.collider.l = 10 # diameter / 2
+        
+        #Temporary Variable that we use to check if the player is on the ground.
+        self.on_ground = False
+        #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
+        self.speed = 120
+        self.jump_force  = -180
+        
+        self.move_direction = LEFT
+        
+        self.BASE_POINT = BOARD_H
+        #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
+
+    def update(self, dt):
+        
+        # if reached start point, do something, like blue barrel becomes fire spirit
+        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
+            self.move_direction = None
+        
+        if self.move_direction == LEFT:
+            self.velocity.x = -self.speed
+        elif self.move_direction == RIGHT:
+            self.velocity.x = self.speed
+        else:
+            self.velocity.x = 0
+        
+        #applying the gravity
+        self.velocity.y += game.Workspace.gravity * dt
+        #update position
+        self.position.y += self.velocity.y * dt
+        
+        if self.position.x + self.velocity.x * dt < self.collider.l:
+            self.position.x = self.collider.l
+            self.border_reached()
+            
+        elif self.position.x + self.velocity.x * dt > BOARD_W - self.collider.l:
+            self.position.x = BOARD_W - self.collider.l
+            self.border_reached()
+        else:
+            self.position.x += self.velocity.x * dt
+
+        # ground collision (temporary)
+        if self.position.y + self.height/2 > self.BASE_POINT:
+            self.position.y = self.BASE_POINT - self.height/2
+            self.velocity.y = 0
+            self.on_ground = True
+        else:
+            self.on_ground = False
+            
+        self.collider.position = self.position
+        
+    #helper functions that we use to change  the velocity speed of the player
+    def move_left(self):
+        self.velocity.x = -self.speed
+    
+    def move_right(self):
+        self.velocity.x = self.speed
+    
+    def stop(self):
+        self.velocity.x = 0
+    
+    def jump(self):
+        #temporary jump mechanics
+        if self.on_ground:
+            self.velocity.y += self.jump_force
+            self.on_ground = False
+            
+    def border_reached(self):
+        if self.move_direction == LEFT:
+            self.move_direction = RIGHT
+        
+        else:
+            if self.move_direction == RIGHT:
+                self.move_direction = LEFT
+    
+    def display(self):
+        fill(255, 165, 0)
         circle(self.position.x, self.position.y, self.height)
         
 #Class For The Player
@@ -497,7 +723,7 @@ class Player(Instance):
             self.velocity.y += self.jump_force
             self.on_ground = False
     
-    def draw(self):
+    def display(self):
         fill(255,255,255)
         circle(self.position.x, self.position.y, self.height)
 
@@ -522,7 +748,7 @@ class Platform(Instance):
         pass
     
     #The draw funtions of the platform, where from the 2 points we create 15 pixels blocks. (this funciton can be used for vertical horizotnal and diagonal platforms.)
-    def draw(self):
+    def display(self):
         direction = self.P2 - self.P1;
         distance = direction.magnitude()
         unit_direction = direction.unit()
@@ -534,9 +760,6 @@ class Platform(Instance):
             stroke(255)         
             fill(255, 0, 0) 
             rect(tile_position.x, tile_position.y, 16, 16)
-            
-        stroke(255)
-        line(self.collider.position.origin.x, self.collider.position.origin.y, self.P2.x, self.P2.y)
                 
                 
 class Game:
@@ -573,9 +796,10 @@ class Game:
                 if i.enum_type == Enum["ENUM_TYPE"]["PLAYER"] or i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
                     origin = Vector2(i.position.x, i.position.y + i.collider.l/2)
                     direction = Vector2(0, 1)
-                                    
+
                     intersection, target = self.Workspace.Raycast(Ray2(origin, direction, 10000))
-                                    
+                    print(intersection)
+
                     if intersection:
                         i.BASE_POINT = intersection.y  - i.collider.collider_aura/2
                     
@@ -623,7 +847,6 @@ class Game:
                                     if intersection:
                                         self.localPlayer.BASE_POINT = intersection.y  - self.localPlayer.collider.collider_aura/2
                                     
-                                    
                                 
                     
         
@@ -633,28 +856,41 @@ class Game:
         
     def PreRender(self, dt):
         # Preprocessing for the frame to render, such as setting up the threads, etc.
+        pass
         background(0)
         
     def Render(self, dt):
         # Iterate through objects in Game.Workspace and do the honors, run every thread here
+        
         for i in self.Workspace.GetChildren():
-            i.draw()
+            i.display()
+            #self.__running_threads[i.objectId] = threading.Thread(target = i.display, args = ())
+            #self.__running_threads[i.objectId].start()
         
     def PostRender(self, dt):
         # Post processing after frame has been drawn. remove all garbage, etc.
         
-        pass
+        #for i in self.Workspace.GetChildren():
+            #self.__running_threads[i.objectId].join()
+            #del self.__running_threads[i.objectId]
+            
+        self._RenderPipelineRunning = False
 
 #Creating the testing class Player and platforms.
 game = Game()
 platforms = [
-    Platform(Vector2(0, BOARD_H), Vector2(BOARD_W, BOARD_H)),
-    Platform(Vector2(0, 540), Vector2(350, 540)),    
-    Platform(Vector2(0, 460), Vector2(300, 480))
+    Platform(Vector2(0-16, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
+    Platform(Vector2(0-16, BOARD_H - 16*6-32), Vector2(BOARD_W - 16*2-32, BOARD_H - 16*5-32)),    
+    Platform(Vector2(16*2+32, BOARD_H - 16*8.7 - 32*2), Vector2(BOARD_W+32, BOARD_H - 16*10 -32*2)),
+    Platform(Vector2(0-16, BOARD_H - 16*14.2 - 32*3), Vector2(BOARD_W-16*2-32, BOARD_H - 16*13 -32*3)),
+    Platform(Vector2(16*2+32, BOARD_H - 16*16.9 - 32*4), Vector2(BOARD_W+32, BOARD_H - 16*18.3 -32*4)),
+    Platform(Vector2(0-16, BOARD_H - 16*21.5 - 32*5), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21 -32*5))
 ]
 
-Barrels = [
-    Barrel(Vector2(100, 0))
+Obstacles = [
+    Barrel(Vector2(100, 0)),
+    BlueBarrel(Vector2(100, 0)),
+    FireSpirit(Vector2(100, 0))
 ]
 
 for p in platforms:
@@ -664,8 +900,11 @@ for p in platforms:
     p.collider.position.direction = (p.P2 - p.P1).unit()
     p.collider.position.magnitude = (p.P2 - p.P1).magnitude()
     
-for b in Barrels:
+for b in Obstacles:
     game.Workspace.AddChild(b)
+    
+ladder_test = Ladder(Vector2(200, 500), game.Workspace.Raycast)
+game.Workspace.AddChild(ladder_test)
     
     
 
@@ -691,7 +930,6 @@ def draw():
     
     if not game._PhysicsPipelineRunning:
         game._PhysicsPipelineRunning = True
-        
         # NO MULTITHREADING HERE!!!!
         
         game.PreSimulation(time.time() - Timestamp)
@@ -710,5 +948,3 @@ def draw():
             game.PreRender(time.time() - Timestamp)
             game.Render(time.time() - Timestamp)
             game.PostRender(time.time() - Timestamp)
-            
-            game._RenderPipelineRunning = False
