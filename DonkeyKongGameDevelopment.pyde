@@ -29,7 +29,8 @@ Enum["ENUM_TYPE"] = {
     "PLATFORM": 102,
     "BARREL": 103,
     "LADDER": 104,
-    "FIRE_SPIRIT": 105
+    "FIRE_SPIRIT": 105,
+    "ITEM": 106
 }
         
 
@@ -115,7 +116,17 @@ class Collider:
         self.l = l #dimension / size / radius, etc.
         
         self.collider_aura = 0 # an additional region/offset around the collider
-        
+    
+    @staticmethod
+    def circle_collision(c1, c2):
+        dx = c1.position.x - c2.position.x
+        dy = c1.position.y - c2.position.y
+
+        dist_sq = dx*dx + dy*dy
+        r = (c1.l + c1.collider_aura/2) + (c2.l + c2.collider_aura/2)
+
+        return dist_sq <= r*r
+    
     def ray2_intersected(self, ray):
         # Computes ray-circle intersection; returns closest hit within ray.magnitude or None
         if self.collider_type == Enum["COLLIDER_TYPE"]["CIRCLE"]:
@@ -257,7 +268,7 @@ class Instance:
         self.position = Vector2(0, 0)
         self.velocity = Vector2(0, 0)
         
-        if EnumType == Enum["ENUM_TYPE"]["PLAYER"] or EnumType == Enum["ENUM_TYPE"]["BARREL"] or EnumType == Enum["ENUM_TYPE"]["FIRE_SPIRIT"]:
+        if EnumType == Enum["ENUM_TYPE"]["PLAYER"] or EnumType == Enum["ENUM_TYPE"]["BARREL"] or EnumType == Enum["ENUM_TYPE"]["FIRE_SPIRIT"] or EnumType == Enum["ENUM_TYPE"]["ITEM"]:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], self.position)
             
         elif EnumType == Enum["ENUM_TYPE"]["PLATFORM"] or EnumType == Enum["ENUM_TYPE"]["LADDER"]:
@@ -343,7 +354,6 @@ class Workspace(Service):
         return (intersection, target)
     
 class Ladder(Instance):
-    
     def __init__(self, P=Vector2(0,0), raycast_function=None):
         Instance.__init__(self, "Ladder", Enum["ENUM_TYPE"]["LADDER"], True, False)
         self.position = P
@@ -385,7 +395,25 @@ class Ladder(Instance):
             stroke(255)
             fill(255)
             rect(self.rect_pos.x, self.rect_pos.y, self.width, self.height)
+
+class Item(Instance):
+    def __init__(self, P=Vector2(0,0), type="HAMMER", radius=30):
+        Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["ITEM"], False, False)
+        self.position =  P
+        self.collider = Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], self.position)
+        self.radius = radius
+        self.collider.l = radius  
+        self.type = type
     
+    def display(self):
+        stroke(255,255,0)
+        fill(255,255,0)
+        circle(self.position.x, self.position.y, self.radius)
+    
+    def update(self, dt):
+        pass
+
+        
 class Barrel(Instance): 
     #The class only takes the initial position as a vector as arguments.
     def __init__(self, P=Vector2(0,0)):
@@ -681,12 +709,22 @@ class Player(Instance):
         self.move_direction = LEFT
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
 
+        self.has_hammer = False
+        self.hammer_time = 0
+        self.hammer_radius = 80 
+
     def update(self, dt):
         #applying the gravity
         self.velocity.y += game.Workspace.gravity * dt
         #update position
         self.position.y += self.velocity.y * dt
         
+        if self.has_hammer:
+            self.hammer_time -= dt
+            if self.hammer_time <= 0:
+                self.has_hammer = False
+                self.collider.l = 10
+
         if self.position.x + self.velocity.x * dt < self.collider.l:
             self.position.x = self.collider.l
             
@@ -788,7 +826,8 @@ class Game:
         # Iterate through objects in Game.Workspace and do the honors
         collision_detected = True
         updated_instances = {}
-        
+        # Step 1: update physics for all non-anchored objects
+        player = self.localPlayer
         
             
         for i in self.Workspace.GetChildren():
@@ -798,13 +837,27 @@ class Game:
                     direction = Vector2(0, 1)
 
                     intersection, target = self.Workspace.Raycast(Ray2(origin, direction, 10000))
-                    print(intersection)
 
                     if intersection:
                         i.BASE_POINT = intersection.y  - i.collider.collider_aura/2
-                    
+                
                 i.update(dt)
-        
+
+                if i.enum_type == Enum["ENUM_TYPE"]["ITEM"]:
+                    if i.collider.circle_collision(player.collider, i.collider):
+                        print("PLAYER PICKED", i.type)
+
+                        if i.type == "HAMMER":
+                                player.has_hammer = True
+                                player.hammer_time = 15.0
+                                player.collider.l = player.hammer_radius
+                        
+                        self.Workspace.RemoveChild(i)
+                if player.has_hammer and i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
+                    if i.collider.circle_collision(player.collider, i.collider):
+                        print("Barrel Destroyed")
+                        self.Workspace.RemoveChild(i)
+                        
         if True:
             return
         
@@ -905,7 +958,12 @@ for b in Obstacles:
     
 ladder_test = Ladder(Vector2(200, 500), game.Workspace.Raycast)
 game.Workspace.AddChild(ladder_test)
-    
+
+#testing for the hammer must delete later..
+first = platforms[0]
+hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 30)
+game.Workspace.AddChild(hammer)
+
     
 
 Timestamp = time.time()
@@ -925,7 +983,7 @@ def keyReleased():
 
 def draw():
     # Physics pipeline first (no multi-threading)
-     
+    
     global Timestamp
     
     if not game._PhysicsPipelineRunning:
