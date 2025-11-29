@@ -116,7 +116,7 @@ class Collider:
         self.l = l #dimension / size / radius, etc.
         
         self.collider_aura = 0 # an additional region/offset around the collider
-    
+        
     @staticmethod
     def circle_collision(c1, c2):
         dx = c1.position.x - c2.position.x
@@ -126,7 +126,7 @@ class Collider:
         r = (c1.l + c1.collider_aura/2) + (c2.l + c2.collider_aura/2)
 
         return dist_sq <= r*r
-    
+        
     def ray2_intersected(self, ray):
         # Computes ray-circle intersection; returns closest hit within ray.magnitude or None
         if self.collider_type == Enum["COLLIDER_TYPE"]["CIRCLE"]:
@@ -140,7 +140,12 @@ class Collider:
             C_x = self.position.x
             C_y = self.position.y
             
-            m = ray.direction.y / ray.direction.x
+            m = 0
+            
+            try:
+                m = ray.direction.y / ray.direction.x
+            except:
+                m = (ray.direction.y) / (ray.direction.x+0.01)
 
             a = 1 + m**2
             b = 2 * m * A_x - 2 * C_y * m - 2 * C_x - 2 * m**2 * A_x
@@ -354,6 +359,7 @@ class Workspace(Service):
         return (intersection, target)
     
 class Ladder(Instance):
+    
     def __init__(self, P=Vector2(0,0), raycast_function=None):
         Instance.__init__(self, "Ladder", Enum["ENUM_TYPE"]["LADDER"], True, False)
         self.position = P
@@ -388,6 +394,9 @@ class Ladder(Instance):
                 self.height = abs(self.top_pos.y - self.bottom_pos.y)
                 self.rect_pos = Vector2(self.position.x - self.width/2, self.top_pos.y)
         compute_ladder_bounds()
+        
+    def update(self, dt):
+        pass
     
     
     def display(self):
@@ -395,7 +404,7 @@ class Ladder(Instance):
             stroke(255)
             fill(255)
             rect(self.rect_pos.x, self.rect_pos.y, self.width, self.height)
-
+            
 class Item(Instance):
     def __init__(self, P=Vector2(0,0), type="HAMMER", radius=30):
         Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["ITEM"], False, False)
@@ -412,8 +421,7 @@ class Item(Instance):
     
     def update(self, dt):
         pass
-
-        
+    
 class Barrel(Instance): 
     #The class only takes the initial position as a vector as arguments.
     def __init__(self, P=Vector2(0,0)):
@@ -700,43 +708,46 @@ class Player(Instance):
         
         #Temporary Variable that we use to check if the player is on the ground.
         self.on_ground = False
+        self.climbDirection = None
+        self.isClimbing = False
         #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
         self.speed = 120
         self.jump_force  = -180
+        self.climb_velocity = 30
         
         self.BASE_POINT = BOARD_H
         
         self.move_direction = LEFT
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
-
+        
         self.has_hammer = False
         self.hammer_time = 0
         self.hammer_radius = 80 
 
     def update(self, dt):
         #applying the gravity
-        self.velocity.y += game.Workspace.gravity * dt
+        self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
-        self.position.y += self.velocity.y * dt
+        self.position.y += self.velocity.y * dt * (1-self.anchored)
         
         if self.has_hammer:
             self.hammer_time -= dt
             if self.hammer_time <= 0:
                 self.has_hammer = False
                 self.collider.l = 10
-
+        
         if self.position.x + self.velocity.x * dt < self.collider.l:
-            self.position.x = self.collider.l
+            self.position.x = self.collider.l * (1-self.anchored)
             
         elif self.position.x + self.velocity.x * dt > BOARD_W - self.collider.l:
             self.position.x = BOARD_W - self.collider.l
             
         else:
-            self.position.x += self.velocity.x * dt
+            self.position.x += self.velocity.x * dt * (1-self.anchored)
         
 
         # ground collision (temporary)
-        if self.position.y + self.height/2 > self.BASE_POINT:
+        if self.position.y + self.height/2 > self.BASE_POINT and self.anchored == False:
             self.position.y = self.BASE_POINT - self.height/2
             self.velocity.y = 0
             self.on_ground = True
@@ -744,6 +755,44 @@ class Player(Instance):
             self.on_ground = False
             
         self.collider.position = self.position
+        
+        for child in game.Workspace.GetChildren():        
+            
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+                ladder = child
+                
+                top = ladder.top_pos
+                bottom = ladder.bottom_pos
+                
+                
+                if abs(self.position.x - top.x) <= self.collider.l:
+                    print(self.isClimbing, self.climbDirection)
+
+                    if bottom.y >= self.position.y >= top.y - self.collider.l:
+
+                        if self.climbDirection == UP and not self.isClimbing:
+                            self.isClimbing = True
+                            self.anchored = True
+                            
+                        elif self.climbDirection:
+                            self.position.y -= self.climb_velocity * dt
+                            self.velocity.y = 0
+
+                    elif self.isClimbing and self.climbDirection == None:
+                        
+                        if self.position.y >= top.y and self.position.y <= bottom.y:
+                            self.isClimbing = True
+                            self.anchored = True
+                            
+                        else:
+                            self.isClimbing = True
+                            self.anchored = True
+                            
+
+
+
+                            
+                                
         
     #helper functions that we use to change  the velocity speed of the player
     def move_left(self):
@@ -762,7 +811,7 @@ class Player(Instance):
             self.on_ground = False
     
     def display(self):
-        fill(255,255,255)
+        fill(255, 192, 203)
         circle(self.position.x, self.position.y, self.height)
 
 
@@ -782,7 +831,7 @@ class Platform(Instance):
         
         self.P2 = d.unit().rmul((d.magnitude() // 16) * 16).vadd(P1)
         
-    def update(dt):
+    def update(self, dt):
         pass
     
     #The draw funtions of the platform, where from the 2 points we create 15 pixels blocks. (this funciton can be used for vertical horizotnal and diagonal platforms.)
@@ -826,12 +875,11 @@ class Game:
         # Iterate through objects in Game.Workspace and do the honors
         collision_detected = True
         updated_instances = {}
-        # Step 1: update physics for all non-anchored objects
-        player = self.localPlayer
+        
         
             
         for i in self.Workspace.GetChildren():
-            if not i.anchored:
+            if True:
                 if i.enum_type == Enum["ENUM_TYPE"]["PLAYER"] or i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
                     origin = Vector2(i.position.x, i.position.y + i.collider.l/2)
                     direction = Vector2(0, 1)
@@ -840,24 +888,24 @@ class Game:
 
                     if intersection:
                         i.BASE_POINT = intersection.y  - i.collider.collider_aura/2
-                
+                    
                 i.update(dt)
-
+                
                 if i.enum_type == Enum["ENUM_TYPE"]["ITEM"]:
-                    if i.collider.circle_collision(player.collider, i.collider):
+                    if i.collider.circle_collision(game.localPlayer.collider, i.collider):
                         print("PLAYER PICKED", i.type)
 
                         if i.type == "HAMMER":
-                                player.has_hammer = True
-                                player.hammer_time = 15.0
-                                player.collider.l = player.hammer_radius
+                                game.localPlayer.has_hammer = True
+                                game.localPlayer.hammer_time = 15.0
+                                game.localPlayer.collider.l = game.localPlayer.hammer_radius
                         
                         self.Workspace.RemoveChild(i)
-                if player.has_hammer and i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
-                    if i.collider.circle_collision(player.collider, i.collider):
+                if game.localPlayer.has_hammer and i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
+                    if i.collider.circle_collision(game.localPlayer.collider, i.collider):
                         print("Barrel Destroyed")
                         self.Workspace.RemoveChild(i)
-                        
+        
         if True:
             return
         
@@ -916,9 +964,12 @@ class Game:
         # Iterate through objects in Game.Workspace and do the honors, run every thread here
         
         for i in self.Workspace.GetChildren():
-            i.display()
+            if not i.enum_type == Enum["ENUM_TYPE"]["PLAYER"]:
+                i.display()
             #self.__running_threads[i.objectId] = threading.Thread(target = i.display, args = ())
             #self.__running_threads[i.objectId].start()
+            
+        game.localPlayer.display()
         
     def PostRender(self, dt):
         # Post processing after frame has been drawn. remove all garbage, etc.
@@ -959,31 +1010,35 @@ for b in Obstacles:
 ladder_test = Ladder(Vector2(200, 500), game.Workspace.Raycast)
 game.Workspace.AddChild(ladder_test)
 
-#testing for the hammer must delete later..
-first = platforms[0]
+ladder_test2 = Ladder(Vector2(200, 300), game.Workspace.Raycast)
+game.Workspace.AddChild(ladder_test2)
+
+first = platforms[0]    
 hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 30)
 game.Workspace.AddChild(hammer)
-
-    
 
 Timestamp = time.time()
 
 #temporary game input for player
 def keyPressed():
-    if key == 'a':
+    if keyCode == LEFT:
         game.localPlayer.move_left()
-    if key == 'd':
+    if keyCode == RIGHT:
         game.localPlayer.move_right()
-    if key == 'w':
+    if keyCode == 32:
         game.localPlayer.jump()
-
+    if keyCode == UP:
+        game.localPlayer.climbDirection = UP
+        
 def keyReleased():
-    if key == 'a' or key == 'd':
+    if keyCode == LEFT or keyCode == RIGHT:
         game.localPlayer.stop()
+    if keyCode == UP:
+        game.localPlayer.climbDirection = None
 
 def draw():
     # Physics pipeline first (no multi-threading)
-    
+     
     global Timestamp
     
     if not game._PhysicsPipelineRunning:
