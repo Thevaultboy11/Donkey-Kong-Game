@@ -41,15 +41,13 @@ Enum["ENUM_TYPE"] = {
 }
 
 
-
 class Vector:
     # An abstract class for Vectors
     
     def __init__(self):
         # Base class carries no state; defined for type hierarchy
         pass
-        
-
+    
 class Vector2(Vector):
     # A vector with two components, x and y
     
@@ -113,7 +111,6 @@ class Ray2:
         self.direction = direction
         
         self.magnitude = magnitude
-    
     
 class Collider:
     
@@ -258,15 +255,13 @@ class Collider:
             #return Vector2(C_x, C_y - 100)
             
             return Vector2(C_x + (P_r.x - (P-B).x), C_y + self.l - delta)
-        
-                
+                   
 class Service:
     
     def __init__(self, name):
         # Base service type (e.g., Workspace)
         self.name = name
-        
-        
+              
 class Instance:
     
     def __init__(self, name, EnumType, anchored = False, canCollide = True):
@@ -286,6 +281,27 @@ class Instance:
             
         elif EnumType == Enum["ENUM_TYPE"]["PLATFORM"] or EnumType == Enum["ENUM_TYPE"]["LADDER"]:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["LINE"], Ray2(self.position))
+
+class Animation:    
+    def __init__(self, sprite=None, imageW=32, imageH=32, direction=None, total_slices=0):
+        self.sprite = sprite
+        self.imageW = imageW
+        self.imageH = imageH
+        self.slice = 0
+        self.direction = direction
+        self.animation_speed = 0.1   # seconds per frame (adjust)
+        self.animation_timer = 0     # accumulates dt
+        self.total_slices = total_slices
+
+    
+
+    def play(self, xPosition, yPositon):
+        if self.direction == RIGHT:
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
+        elif self.direction == LEFT:
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
+    
+
 
 class Workspace(Service):
     
@@ -731,15 +747,10 @@ class Player(Instance):
         self.has_hammer = False
         self.hammer_time = 0
         self.hammer_radius = 80
-
-        self.sprite = sprite
-        self.img_w = 32
-        self.img_h = 32
-        self.slice = 0
-        self.direction = RIGHT
-        self.animation_speed = 0.1   # seconds per frame (adjust)
-        self.animation_timer = 0     # accumulates dt
-        self.total_slices = 3       # number of frames in your walking animation
+        #sprite=None, imageW=32, imageH=32, direction=None, total_slices=0
+        self.animations = {
+            "WALK": Animation(self.sprite, 32, 32, RIGHT, 3)
+        }
 
 
     def update(self, dt):
@@ -748,15 +759,7 @@ class Player(Instance):
         #update position
         self.position.y += self.velocity.y * dt * (1-self.anchored)
         
-        #the animation code
-        if self.velocity.x != 0:
-            self.animation_timer += dt
-            if self.animation_timer >= self.animation_speed:
-                self.animation_timer = 0
-                self.slice = (self.slice + 1) % self.total_slices
-        else:
-            self.slice = 0
-
+    
 
 
         if self.has_hammer:
@@ -840,10 +843,22 @@ class Player(Instance):
             self.on_ground = False
     
     def display(self):
-        if self.direction == RIGHT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
-        elif self.direction == LEFT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
+        
+        if self.velocity.x != 0 and self.on_ground:
+            if self.animations["WALK"].animation_timer >= self.animations["WALK"].animation_speed:
+                self.animations["WALK"].animation_timer = 0
+                self.animations["WALK"].slice = (self.animations["WALK"].slice + 1) % self.animations["WALK"].total_slices
+            if self.velocity > 0:
+                self.animations["WALK"].direction = RIGHT
+            elif self.velocity < 0:
+                self.animations["WALK"].direction = LEFT
+
+            self.animations["WALK"].play(self.position.x, self.position.y)
+        else:
+            self.animations["WALK"].slice = 0
+
+        
+
 
 #Class Platform
 class Platform(Instance):
@@ -876,8 +891,7 @@ class Platform(Instance):
             stroke(255)         
             fill(255, 0, 0) 
             rect(tile_position.x, tile_position.y, 16, 16)
-                
-                
+                            
 class Game:
     
     def __init__(self):
