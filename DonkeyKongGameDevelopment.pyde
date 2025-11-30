@@ -9,10 +9,16 @@ BOARD_W = int(224*2.5)
 BOARD_H = int(256*2.5)
 BACKGROUND_COLOR = 000
 
+#GLOBAL IMAGES
+mario_running = None
+
+
 def setup():
     # Placeholder for Processing setup; currently unused
     size(BOARD_W, BOARD_H)
     background(BACKGROUND_COLOR)
+    global mario_running 
+    mario_running = loadImage("mario_running.png")
     pass
 
 Enum = {}
@@ -32,7 +38,8 @@ Enum["ENUM_TYPE"] = {
     "FIRE_SPIRIT": 105,
     "ITEM": 106
 }
-        
+
+
 
 class Vector:
     # An abstract class for Vectors
@@ -695,7 +702,7 @@ class FireSpirit(Instance):
 #Class For The Player
 class Player(Instance): 
     #The class only takes the initial position as a vector as arguments.
-    def __init__(self, P=Vector2(0,0)):
+    def __init__(self, P=None, sprite=None):
         
         Instance.__init__(self, "Player", Enum["ENUM_TYPE"]["PLAYER"], False, True)
         
@@ -722,7 +729,17 @@ class Player(Instance):
         
         self.has_hammer = False
         self.hammer_time = 0
-        self.hammer_radius = 80 
+        self.hammer_radius = 80
+
+        self.sprite = sprite
+        self.img_w = 32
+        self.img_h = 32
+        self.slice = 0
+        self.direction = RIGHT
+        self.animation_speed = 0.1   # seconds per frame (adjust)
+        self.animation_timer = 0     # accumulates dt
+        self.total_slices = 2       # number of frames in your walking animation
+
 
     def update(self, dt):
         #applying the gravity
@@ -730,6 +747,17 @@ class Player(Instance):
         #update position
         self.position.y += self.velocity.y * dt * (1-self.anchored)
         
+        #the animation code
+        if self.velocity.x != 0:
+            self.animation_timer += dt
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.slice = (self.slice + 1) % self.total_slices
+        else:
+            self.slice = 0
+
+
+
         if self.has_hammer:
             self.hammer_time -= dt
             if self.hammer_time <= 0:
@@ -795,10 +823,12 @@ class Player(Instance):
     #helper functions that we use to change  the velocity speed of the player
     def move_left(self):
         self.velocity.x = -self.speed
+        self.direction = LEFT
     
     def move_right(self):
         self.velocity.x = self.speed
-    
+        self.direction = RIGHT
+
     def stop(self):
         self.velocity.x = 0
     
@@ -809,10 +839,10 @@ class Player(Instance):
             self.on_ground = False
     
     def display(self):
-        fill(255, 192, 203)
-        circle(self.position.x, self.position.y, self.height)
-
-
+        if self.direction == RIGHT:
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * self.img_w, 0, (self.slice+1) * self.img_w, self.img_h)
+        elif self.direction == LEFT:
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice+1) * self.img_w, 0, self.slice * self.img_w, self.img_h)
 
 #Class Platform
 class Platform(Instance):
@@ -858,7 +888,7 @@ class Game:
         self._PhysicsPipelineRunning = False
         self._RenderPipelineRunning = False
         
-        self.localPlayer = Player(Vector2(100, 0))
+        self.localPlayer = Player(Vector2(100, 0), mario_running)
         self.localPlayer.collider.collider_aura = 10
         
         self.Workspace.AddChild(self.localPlayer)
