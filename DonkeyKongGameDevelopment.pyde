@@ -2,6 +2,7 @@ import math          # math helpers (unused currently)
 import random        # random utilities (unused currently)
 import threading     # threading hooks for render pipeline (not yet used)
 import time          # timing for delta time
+import os
 
 #Board Global Variables
 
@@ -9,16 +10,16 @@ BOARD_W = int(224*2.5)
 BOARD_H = int(256*2.5)
 BACKGROUND_COLOR = 000
 
+PATH = os.getcwd()
+
 #GLOBAL IMAGES
-mario_running = None
+mario_running = loadImage(PATH + "/images/mario_running.png")
 
 
 def setup():
     # Placeholder for Processing setup; currently unused
     size(BOARD_W, BOARD_H)
     background(BACKGROUND_COLOR)
-    global mario_running 
-    mario_running = loadImage("mario_running.png")
     pass
 
 Enum = {}
@@ -738,7 +739,7 @@ class Player(Instance):
         self.direction = RIGHT
         self.animation_speed = 0.1   # seconds per frame (adjust)
         self.animation_timer = 0     # accumulates dt
-        self.total_slices = 2       # number of frames in your walking animation
+        self.total_slices = 3       # number of frames in your walking animation
 
 
     def update(self, dt):
@@ -840,9 +841,9 @@ class Player(Instance):
     
     def display(self):
         if self.direction == RIGHT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * self.img_w, 0, (self.slice+1) * self.img_w, self.img_h)
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
         elif self.direction == LEFT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice+1) * self.img_w, 0, self.slice * self.img_w, self.img_h)
+            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
 
 #Class Platform
 class Platform(Instance):
