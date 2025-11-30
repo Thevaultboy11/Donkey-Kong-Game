@@ -764,9 +764,7 @@ class Player(Instance):
                 top = ladder.top_pos
                 bottom = ladder.bottom_pos
                 
-                
                 if abs(self.position.x - top.x) <= self.collider.l:
-                    print(self.isClimbing, self.climbDirection)
 
                     if bottom.y >= self.position.y >= top.y - self.collider.l:
 
@@ -780,9 +778,9 @@ class Player(Instance):
 
                     elif self.isClimbing and self.climbDirection == None:
                         
-                        if self.position.y >= top.y and self.position.y <= bottom.y:
-                            self.isClimbing = True
-                            self.anchored = True
+                        if top.y - self.collider.l >= self.position.y >= top.y - self.collider.l-5:
+                            self.isClimbing = False
+                            self.anchored = False
                             
                         else:
                             self.isClimbing = True
