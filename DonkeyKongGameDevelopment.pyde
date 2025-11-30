@@ -14,7 +14,13 @@ PATH = os.getcwd()
 
 #GLOBAL IMAGES
 mario_running = loadImage(PATH + "/images/mario_running.png")
-
+mario_jumping = loadImage(PATH + "/images/mario_jumping.png")
+mario_idle = loadImage(PATH + "/images/mario_idle.png")
+mario_climbing_ladder = loadImage(PATH + "/images/mario_climbing_ladder.png")
+mario_dying_right = loadImage(PATH + "/images/mario_dying_right.png")
+mario_dying_left = loadImage(PATH + "/images/mario_dying_left.png")
+mario_hammer_idle = loadImage(PATH + "/images/mario_hammer_idle.png")
+mario_hammer_running = loadImage(PATH + "/images/mario_hammer_running.png")
 
 def setup():
     # Placeholder for Processing setup; currently unused
@@ -294,6 +300,9 @@ class Animation:
         self.total_slices = total_slices
 
     def update(self, dt):
+        #if there is only one slice then do not update anything.
+        if self.total_slices <= 1:
+            return
         self.animation_timer += dt
         print(self.slice, self.total_slices)
         if self.animation_timer >= self.animation_speed:
@@ -305,9 +314,8 @@ class Animation:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
         elif self.direction == LEFT:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
-    
-
-
+        else:
+            image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
 class Workspace(Service):
     
     def __init__(self, gravity=10):
@@ -752,13 +760,47 @@ class Player(Instance):
         self.has_hammer = False
         self.hammer_time = 0
         self.hammer_radius = 80
+
         #sprite=None, imageW=32, imageH=32, direction=None, total_slices=0
         self.animations = {
-            "WALK": Animation(mario_running, 32, 32, RIGHT, 3)
+            "WALK": Animation(mario_running, 32, 32, RIGHT, 3),
+            "CLIMB": Animation(mario_climbing_ladder, 32, 32, UP, 2),
+            "IDLE": Animation(mario_idle, 32, 32, None, 1),
+            "JUMP": Animation(mario_jump, 32, 32, RIGHT, 1),
+            "HAMMER_IDLE": Animation(mario_hammer_idle, 64, 64, RIGHT, 2),
+            "HAMMER_WALK": Animation(mario_hammer_running, 64, 64, RIGHT, 4),
+            "DIE_RIGHT": Animation(mario_dying_right, 32, 32, None, 5),
+            "DIE_LEFT": Animation(mario_dying_left, 32, 32, None, 5)
         }
+
+        self.current_animation = self.animations["IDLE"]
+        self.direction = RIGHT
+
+    def chose_animation_state(self):
+       
+        if self.isClimbing:
+            self.current_animation = self.animations["CLIMB"]
+            self.current_animation.direction = None
+            return
+       
+        if not self.on_ground:
+            self.current_animation = self.animations["JUMP"]
+            self.current_animation.direction = self.direction
+            return
+        
+        if self.velocity.x != 0:
+            self.current_animation = self.animations["WALK"]
+            self.current_animation.direction = self.direction
+            return
+        
+        self.current_animation = self.animations["IDLE"]
+        self.current_animation.direction = self.direction
+
+        
 
 
     def update(self, dt):
+        
         #applying the gravity
         self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
@@ -818,7 +860,8 @@ class Player(Instance):
                             
                         else:
                             self.isClimbing = True
-                            self.anchored = True            
+                            self.anchored = True      
+
                                 
         
     #helper functions that we use to change  the velocity speed of the player
@@ -840,6 +883,10 @@ class Player(Instance):
             self.on_ground = False
     
     def display(self, dt=0):
+        #updating the dt
+        self.choose_animation_state()
+        self.current_animation.update(dt)
+        self.current_animation.play(self.position.x, self.position.y)
         if self.velocity.x != 0:
             self.animations["WALK"].update(dt+1/frameRate)
             if self.velocity.x > 0:
@@ -848,9 +895,8 @@ class Player(Instance):
                 self.animations["WALK"].direction = LEFT
 
             self.animations["WALK"].play(self.position.x, self.position.y)
-
-        
-
+        elif self.velocity.x == 0 and self.velocity.y == 0:
+            
 
 #Class Platform
 class Platform(Instance):
@@ -882,7 +928,7 @@ class Platform(Instance):
             tile_position = unit_direction.rmul(16 * i).vadd(self.P1)
             stroke(255)         
             fill(255, 0, 0) 
-            rect(tile_position.x, tile_position.y, 16, 16)
+            image(platform_red, tile_position.x, tile_position.y, 32, 32, )
                             
 class Game:
     
