@@ -283,23 +283,28 @@ class Instance:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["LINE"], Ray2(self.position))
 
 class Animation:    
-    def __init__(self, sprite=None, imageW=32, imageH=32, direction=None, total_slices=0):
+    def __init__(self, sprite=None, imageW=32, imageH=32, direction=RIGHT, total_slices=0):
         self.sprite = sprite
-        self.imageW = imageW
-        self.imageH = imageH
+        self.img_w = imageW
+        self.img_h = imageH
         self.slice = 0
         self.direction = direction
         self.animation_speed = 0.1   # seconds per frame (adjust)
         self.animation_timer = 0     # accumulates dt
         self.total_slices = total_slices
 
-    
+    def update(self, dt):
+        self.animation_timer += dt
+        print(self.slice, self.total_slices)
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.slice = (self.slice + 1) % self.total_slices
 
     def play(self, xPosition, yPositon):
         if self.direction == RIGHT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
+            image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
         elif self.direction == LEFT:
-            image(self.sprite, self.position.x - self.img_w // 2, self.position.y - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
+            image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
     
 
 
@@ -719,7 +724,7 @@ class FireSpirit(Instance):
 #Class For The Player
 class Player(Instance): 
     #The class only takes the initial position as a vector as arguments.
-    def __init__(self, P=None, sprite=None):
+    def __init__(self, P=None):
         
         Instance.__init__(self, "Player", Enum["ENUM_TYPE"]["PLAYER"], False, True)
         
@@ -749,7 +754,7 @@ class Player(Instance):
         self.hammer_radius = 80
         #sprite=None, imageW=32, imageH=32, direction=None, total_slices=0
         self.animations = {
-            "WALK": Animation(self.sprite, 32, 32, RIGHT, 3)
+            "WALK": Animation(mario_running, 32, 32, RIGHT, 3)
         }
 
 
@@ -758,9 +763,6 @@ class Player(Instance):
         self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
         self.position.y += self.velocity.y * dt * (1-self.anchored)
-        
-    
-
 
         if self.has_hammer:
             self.hammer_time -= dt
@@ -816,12 +818,7 @@ class Player(Instance):
                             
                         else:
                             self.isClimbing = True
-                            self.anchored = True
-                            
-
-
-
-                            
+                            self.anchored = True            
                                 
         
     #helper functions that we use to change  the velocity speed of the player
@@ -842,20 +839,15 @@ class Player(Instance):
             self.velocity.y += self.jump_force
             self.on_ground = False
     
-    def display(self):
-        
-        if self.velocity.x != 0 and self.on_ground:
-            if self.animations["WALK"].animation_timer >= self.animations["WALK"].animation_speed:
-                self.animations["WALK"].animation_timer = 0
-                self.animations["WALK"].slice = (self.animations["WALK"].slice + 1) % self.animations["WALK"].total_slices
-            if self.velocity > 0:
+    def display(self, dt=0):
+        if self.velocity.x != 0:
+            self.animations["WALK"].update(dt+1/frameRate)
+            if self.velocity.x > 0:
                 self.animations["WALK"].direction = RIGHT
-            elif self.velocity < 0:
+            elif self.velocity.x < 0:
                 self.animations["WALK"].direction = LEFT
 
             self.animations["WALK"].play(self.position.x, self.position.y)
-        else:
-            self.animations["WALK"].slice = 0
 
         
 
@@ -903,7 +895,7 @@ class Game:
         self._PhysicsPipelineRunning = False
         self._RenderPipelineRunning = False
         
-        self.localPlayer = Player(Vector2(100, 0), mario_running)
+        self.localPlayer = Player(Vector2(100, 0))
         self.localPlayer.collider.collider_aura = 10
         
         self.Workspace.AddChild(self.localPlayer)
@@ -1012,7 +1004,7 @@ class Game:
             #self.__running_threads[i.objectId] = threading.Thread(target = i.display, args = ())
             #self.__running_threads[i.objectId].start()
             
-        game.localPlayer.display()
+        game.localPlayer.display(dt)
         
     def PostRender(self, dt):
         # Post processing after frame has been drawn. remove all garbage, etc.
