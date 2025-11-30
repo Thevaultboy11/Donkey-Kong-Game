@@ -23,10 +23,10 @@ mario_dying_right = loadImage(PATH + "/images/mario_dying_right.png")
 mario_dying_left = loadImage(PATH + "/images/mario_dying_left.png")
 mario_hammer_idle = loadImage(PATH + "/images/mario_hammer_idle.png")
 mario_hammer_running = loadImage(PATH + "/images/mario_hammer_running.png")
-ladder_image = loadImage(PATH + "/images/ladder_white.png")
 
-# PLATFORMS
+# INFRASTRUCTURE
 platform_red = loadImage(PATH + "/images/platform_red.png")
+ladder_image = loadImage(PATH + "/images/ladder_white.png")
 
 # BARRELS
 barrel_brown_roll_side = loadImage(PATH + "/images/brown_barrel_roll_side.png")
@@ -35,6 +35,9 @@ barrel_brown_roll_front = loadImage(PATH + "/images/brown_barrel_roll_front.png"
 barrel_blue_roll_side = loadImage(PATH + "/images/blue_barrel_roll_side.png")
 barrel_blue_roll_front = loadImage(PATH + "/images/blue_barrel_roll_front.png")
 
+# ENTITIES
+fire_sprit_orange = loadImage(PATH + "/images/fire_spirit_orange.png")
+fire_sprit_blue = loadImage(PATH + "/images/fire_spirit_blue.png")
 
 def setup():
     # Placeholder for Processing setup; currently unused
@@ -789,59 +792,77 @@ class BlueBarrel(Instance):
         #circle(self.position.x, self.position.y, self.height)
         
 class FireSpirit(Instance): 
+
     #The class only takes the initial position as a vector as arguments.
-    def __init__(self, P=Vector2(0,0)):
+    def __init__(self, P=None):
         
-        Instance.__init__(self, "FireSpirit", Enum["ENUM_TYPE"]["BARREL"], False, True)
+        Instance.__init__(self, "Player", Enum["ENUM_TYPE"]["BARREL"], False, True)
         
         self.position = P
         
         self.width = 20
         self.height = 20
         
-        self.collider.l = 10 # diameter / 2
+        self.collider.l = 15 # diameter / 2
         
         #Temporary Variable that we use to check if the player is on the ground.
         self.on_ground = False
+        self.climbDirection = None
+        self.isClimbing = False
         #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
-        self.speed = 80
+        self.speed = 120
         self.jump_force  = -180
-        
-        self.move_direction = LEFT
+        self.climb_velocity = 30
         
         self.BASE_POINT = BOARD_H
-        #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
+        
+        self.move_direction = RIGHT
+
+        #sprite=None, imageW=32, imageH=32, direction=None, total_slices=0
+        self.animations = {
+            "ORANGE": Animation(fire_sprit_orange, 32, 32, RIGHT, 2)
+        }
+
+        self.current_animation = self.animations["ORANGE"]
+        self.direction = RIGHT
+        self.move_right()
+
+    def choose_animation_state(self, dt):
+
+        self.current_animation.direction = self.direction
+
 
     def update(self, dt):
-        
-        # if reached start point, do something, like blue barrel becomes fire spirit
-        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
-            self.move_direction = None
-        
-        if self.move_direction == LEFT:
-            self.velocity.x = -self.speed
-        elif self.move_direction == RIGHT:
-            self.velocity.x = self.speed
-        else:
-            self.velocity.x = 0
+
+        if random.randint(0, 1000) >= 995:
+            self.climbDirection = UP
+
+        if random.randint(0, 1000) >= 997:
+            if self.move_direction == LEFT:
+                self.move_direction = RIGHT
+                self.move_left()
+
+            elif self.move_direction == RIGHT:
+                self.move_direction = LEFT
+                self.move_right()
         
         #applying the gravity
-        self.velocity.y += game.Workspace.gravity * dt
+        self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
-        self.position.y += self.velocity.y * dt
+        self.position.y += self.velocity.y * dt * (1-self.anchored)
         
         if self.position.x + self.velocity.x * dt < self.collider.l:
-            self.position.x = self.collider.l
-            self.border_reached()
-            
+            self.position.x = self.collider.l * (1-self.anchored)
+
         elif self.position.x + self.velocity.x * dt > BOARD_W - self.collider.l:
             self.position.x = BOARD_W - self.collider.l
-            self.border_reached()
+            self.move_direction = LEFT
         else:
-            self.position.x += self.velocity.x * dt
+            self.position.x += self.velocity.x * dt * (1-self.anchored)
+        
 
         # ground collision (temporary)
-        if self.position.y + self.height/2 > self.BASE_POINT:
+        if self.position.y + self.height/2 > self.BASE_POINT and self.anchored == False:
             self.position.y = self.BASE_POINT - self.height/2
             self.velocity.y = 0
             self.on_ground = True
@@ -850,33 +871,64 @@ class FireSpirit(Instance):
             
         self.collider.position = self.position
         
+        for child in game.Workspace.GetChildren():
+            
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+                ladder = child
+                
+                top = ladder.top_pos
+                bottom = ladder.bottom_pos
+                
+                if abs(self.position.x - top.x) <= self.collider.l:
+
+                    if bottom.y >= self.position.y >= top.y - self.collider.l:
+
+                        if self.climbDirection == UP and not self.isClimbing:
+                            self.isClimbing = True
+                            self.anchored = True
+                            
+                        elif self.climbDirection:
+                            self.position.y -= self.climb_velocity * dt
+                            self.velocity.y = 0
+
+                    elif self.isClimbing and self.climbDirection == None:
+                        
+                        if top.y - self.collider.l >= self.position.y >= top.y - self.collider.l-5:
+                            self.isClimbing = False
+                            self.anchored = False
+                            
+                        else:
+                            self.isClimbing = True
+                            self.anchored = True    
+                            
+        self.collider.position = self.position  
+
+                                
+        
     #helper functions that we use to change  the velocity speed of the player
     def move_left(self):
         self.velocity.x = -self.speed
+        self.direction = LEFT
     
     def move_right(self):
         self.velocity.x = self.speed
-    
+        self.direction = RIGHT
+
     def stop(self):
         self.velocity.x = 0
     
     def jump(self):
         #temporary jump mechanics
-        if self.on_ground:
+        if self.on_ground and not self.has_hammer:
             self.velocity.y += self.jump_force
             self.on_ground = False
-            
-    def border_reached(self):
-        if self.move_direction == LEFT:
-            self.move_direction = RIGHT
-        
-        else:
-            if self.move_direction == RIGHT:
-                self.move_direction = LEFT
     
     def display(self, dt=0):
-        fill(255, 165, 0)
-        circle(self.position.x, self.position.y, self.height)
+        #updating the dt
+        
+        self.choose_animation_state(dt + (1/frameRate))
+        self.current_animation.update(dt + (1/frameRate))
+        self.current_animation.play(self.position.x, self.position.y)
         
 #Class For The Player
 class Player(Instance): 
@@ -927,7 +979,7 @@ class Player(Instance):
 
     def choose_animation_state(self, dt):
         
-        print(self.on_ground, self.position.y, self.BASE_POINT)
+        #print(self.on_ground, self.position.y, self.BASE_POINT)
        
         if self.isClimbing and self.climbDirection:
             self.animations["CLIMB"].total_slices = 2
