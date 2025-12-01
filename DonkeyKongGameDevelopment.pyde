@@ -73,6 +73,11 @@ score_800 = loadImage(PATH + "score_800.png")
 
 barrel_destroy = loadImage(PATH + "hammer_destroy_barrel_particle.png")
 
+#2 LEVEL PICKUP ITEMS
+first_princess_pickup_item = loadImage(PATH + "princess_pickup1.png")
+second_princess_pickup_item = loadImage(PATH + "princess_pickup2.png")
+third_princess_pickup_item = loadImage(PATH + "princess_pickup3.png")
+
 #GUI INFRASTRUCTURE
 
 gui_mario_angel_icon = loadImage(PATH + "gui_mario_angel.png")
@@ -113,7 +118,8 @@ Enum["ENUM_TYPE"] = {
     "FIRE_SPIRIT": 105,
     "ITEM": 106,
     "HALF_LADDER": 107,
-    "SCREW": 108
+    "SCREW": 108,
+    "PRINCESS_PICKUP": 108
 }
 
 
@@ -388,6 +394,7 @@ class Animation:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
         else:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
+
 class Workspace(Service):
     
     def __init__(self, gravity=10):
@@ -522,6 +529,45 @@ class Screw(Instance):
         if self.isShowing:
             image(screw, self.position.x, self.position.y+20, 24, 24, 0, 0, 30, 32)
 
+class PrincessPickup(Instance):
+    def __init__(self, P=Vector2(0,0), radius=32, type=0):
+        Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["PRINCESS_PICKUP"], True, False)
+        
+        self.position = P
+        self.isShowing = True
+        self.collider = Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], self.position)
+        self.collider.l = radius  
+        self.radius = radius
+        self.type = type
+
+    def update(self ,dt=0):
+        self.collider.position = self.position
+
+        # Check collision with player — but only if showing
+        if self.isShowing:
+            player = game.localPlayer
+            if self.collider.circle_collision(self.collider, player.collider):
+                # Check if player is touching TOP of the screw
+
+                # Player must be slightly ABOVE the screw
+                if abs(player.position.x - self.position.x) < 40 and abs(player.position.y - self.position.y) < 40:
+                    self.isShowing = False
+                    self.active = False  
+                    score_particle = Item(Vector2(self.position.x, self.position.y), "SCORE_500", 30)
+                    game.Workspace.AddChild(score_particle)
+                    game.Debris.AddItem(score_particle, 1)
+                    game.Workspace.RemoveChild(self)    
+
+
+    def display(self, dt=0):
+        if self.isShowing:
+            if self.type == 0:
+                image(first_princess_pickup_item, self.position.x, self.position.y, 32, 32, 0, 0, 30, 32)
+            elif self.type == 1:
+                image(second_princess_pickup_item, self.position.x, self.position.y, 32, 32, 0, 0, 30, 32)
+            elif self.type == 2:
+                image(third_princess_pickup_item, self.position.x, self.position.y, 32, 32, 0, 0, 30, 32)
+
 
 class HalfLadder(Instance):
     
@@ -627,7 +673,9 @@ class Ladder(Instance):
                 
             for num in range(0, number_of_ladders):
                 image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
-            
+
+
+
 class Item(Instance):
     def __init__(self, P=Vector2(0,0), type="HAMMER", radius=30):
         Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["ITEM"], True, False)
@@ -699,7 +747,8 @@ class Item(Instance):
     
     def update(self, dt):
         pass
-    
+
+
 class Barrel(Instance): 
     #The class only takes the initial position as a vector as arguments.
     def __init__(self, P=Vector2(0,0)):
@@ -2024,6 +2073,18 @@ def assemble_level_1():
     hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
     game.Workspace.AddChild(hammer2)
 
+    # self, P=Vector2(0,0), radius=32, type=0)
+
+    princes_pickup_1 = PrincessPickup(Vector2(50, 190), 32, 0)
+    game.Workspace.AddChild(princes_pickup_1)
+
+    princes_pickup_2 = PrincessPickup(Vector2(80, 190), 32, 1)
+    game.Workspace.AddChild(princes_pickup_2)
+
+    princes_pickup_3 = PrincessPickup(Vector2(100, 190), 32, 2)
+    game.Workspace.AddChild(princes_pickup_3)
+
+
     start_p = platforms[0]    
     game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
     game.Workspace.AddChild(game.oil_barrel_item)
@@ -2124,7 +2185,7 @@ def assemble_level_2():
     for sb in static_barrels:
         game.Workspace.AddChild(sb)
 
-assemble_level_2()
+assemble_level_1()
 
 Timestamp = time.time()
 
