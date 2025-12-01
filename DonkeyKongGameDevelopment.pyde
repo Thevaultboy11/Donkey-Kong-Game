@@ -71,15 +71,17 @@ gui_kong_pounding = loadImage(PATH + "gui_kong_pounding.png")
 #The Fonts For The Game Screen
 title_font = None
 menu_font  = None
+hud_font = None
 
 def setup():
     # Placeholder for Processing setup; currently unused
     size(BOARD_W, BOARD_H)
     background(BACKGROUND_COLOR)
-    global title_font, menu_font
+    global title_font, menu_font, hud_font
     title_font = createFont("kong_arcade_font.TTF", 72)
     menu_font  = createFont("kong_arcade_font.TTF", 32)
-    
+    hud_font  = createFont("kong_arcade_font.TTF", 24)
+
     #print(gui_mario_hammer_icon, gui_mario_angel_icon, gui_princess_icon, gui_kong_idle, gui_kong_pounding)
     pass
 
@@ -98,7 +100,8 @@ Enum["ENUM_TYPE"] = {
     "BARREL": 103,
     "LADDER": 104,
     "FIRE_SPIRIT": 105,
-    "ITEM": 106
+    "ITEM": 106,
+    "HALF_LADDER": 107
 }
 
 
@@ -373,6 +376,7 @@ class Animation:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
         else:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
+
 class Workspace(Service):
     
     def __init__(self, gravity=10):
@@ -477,7 +481,63 @@ class Debris(Service):
                 item = d[0]
                 del self.__objects[item.objectId]
                 self.__Workspace.RemoveChild(item) 
+
+class HalfLadder(Instance):
     
+    def __init__(self, P=Vector2(0,0), raycast_function=None):
+        Instance.__init__(self, "Halfladder", Enum["ENUM_TYPE"]["HALF_LADDER"], True, False)
+        self.position = P
+        self.raycast_function = raycast_function
+        self.width = 20
+        self.top_pos = None
+        self.bottom_pos = None
+        self.height = 0
+        self.rect_pos = None
+        def compute_ladder_bounds():
+            if self.raycast_function is None:
+                return
+            #The main jist of this algo is that we take the initial position that can be whenever between the two platforms, then it used the vectorray function to calculate the top edge of the ladder and the bottom part of the ladder so that later we can create a white rectangle.
+            up_origin = Vector2(self.position.x, self.position.y)
+            up_direction = Vector2(0, -1)
+            up_intersection, up_target = self.raycast_function(Ray2(up_origin, up_direction, 10000))
+            
+            #if we can find the up intersection then we set the top position to a up_intersection.
+            if up_intersection:
+                self.top_pos = up_intersection
+            
+            down_origin = Vector2(self.position.x, self.position.y)
+            down_dir = Vector2(0, 1)
+            down_intersection, down_target = self.raycast_function(Ray2(down_origin, down_dir, 10000))
+            
+            #if we can find the down intersection then we set the top position to a up_intersection.
+            if down_intersection:
+                self.bottom_pos = down_intersection
+            
+            #if we can find both of the positions then we calculate the height and change the rectangle_position 
+            if self.top_pos and self.bottom_pos:
+                self.height = abs(self.top_pos.y - self.bottom_pos.y)
+                self.rect_pos = Vector2(self.position.x - self.width/2, self.top_pos.y)
+        compute_ladder_bounds()
+        
+    def update(self, dt):
+        pass
+    
+    
+    def display(self, dt=0):
+        if self.rect_pos and self.height > 0:
+            number_of_ladders = int(self.height // 32)
+            if self.height % 32 > 0:
+                number_of_ladders += 1
+            middle_start = number_of_ladders // 3            
+            middle_end = (number_of_ladders * 2) // 3
+            
+            for num in range(0, number_of_ladders):
+                if num >= middle_start and num <= middle_end:
+                    pass
+                else:
+                    image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
+            
+
 class Ladder(Instance):
     
     def __init__(self, P=Vector2(0,0), raycast_function=None):
@@ -649,7 +709,7 @@ class Barrel(Instance):
         
         for child in game.Workspace.GetChildren():
             
-            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] or child.enum_type == Enum["ENUM_TYPE"]["HALF_LADDER"]:
                 ladder = child
                 
                 top = ladder.top_pos
@@ -810,7 +870,7 @@ class BlueBarrel(Instance):
         
         for child in game.Workspace.GetChildren():
             
-            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] or child.enum_type == Enum["ENUM_TYPE"]["HALF_LADDER"]:
                 ladder = child
                 
                 top = ladder.top_pos
@@ -989,7 +1049,7 @@ class FireSpirit(Instance):
         
         for child in game.Workspace.GetChildren():
             
-            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] or child.enum_type == Enum["ENUM_TYPE"]["HALF_LADDER"]:
                 ladder = child
                 
                 top = ladder.top_pos
@@ -1445,11 +1505,15 @@ class GUI:
             print("  WARNING: current_menu is None for GAME_STATE:", GAME_STATE)
 
     def draw_hud(self, score, lives):
-        textFont(menu_font)
+        textFont(hud_font)
         fill(255)
-        textAlign(LEFT, TOP)
-        text("SCORE: " + str(score), 20, 20)
-        text("LIVES: " + str(lives), 20, 60)
+        textAlign(RIGHT, TOP)
+
+        text("SCORE ", BOARD_W - 10, 20)
+        text(str(score).zfill(6), BOARD_W, 40)
+        text("LIVES ", BOARD_W - 10, 60)
+        text(str(lives).zfill(2), BOARD_W, 80)
+      
 
     def menu_length(self):
         if GAME_STATE == 0:
@@ -1747,11 +1811,13 @@ for p in platforms:
 for b in Obstacles:
     game.Workspace.AddChild(b)
     
-ladder_test = Ladder(Vector2(200, 500), game.Workspace.Raycast)
+ladder_test = HalfLadder(Vector2(200, 500), game.Workspace.Raycast)
 game.Workspace.AddChild(ladder_test)
 
-ladder_test2 = Ladder(Vector2(200, 300), game.Workspace.Raycast)
+ladder_test2 = HalfLadder(Vector2(200, 300), game.Workspace.Raycast)
 game.Workspace.AddChild(ladder_test2)
+
+
 
 first = platforms[1]    
 hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
