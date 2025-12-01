@@ -62,11 +62,11 @@ fire_small = loadImage(PATH + "fire_small.png")
 
 #GUI INFRASTRUCTURE
 
-gui_mario_hammer_icon = loadImage("gui_mario_hammer.png")
-gui_mario_angel_icon = loadImage("gui_mario_angel.png")
-gui_princess_icon = loadImage("gui_princess.png")
-gui_kong_idle = loadImage("gui_kong_idle.png")
-gui_kong_pounding = loadImage("gui_kong_pounding.png")
+gui_mario_hammer_icon = loadImage(PATH + "gui_mario_hammer3.png")
+gui_mario_angel_icon = loadImage(PATH + "gui_mario_angel.png")
+gui_princess_icon = loadImage(PATH + "gui_princess.png")
+gui_kong_idle = loadImage(PATH + "gui_kong_idle.png")
+gui_kong_pounding = loadImage(PATH + "gui_kong_pounding.png")
 #The Fonts For The Game Screen
 title_font = None
 menu_font  = None
@@ -74,11 +74,11 @@ menu_font  = None
 
 def setup():
     # Placeholder for Processing setup; currently unused
-    size(BOARD_W, BOARD_H)
-    background(BACKGROUND_COLOR)
     global title_font, menu_font
     title_font = createFont("kong_arcade_font.TTF", 72)
     menu_font  = createFont("kong_arcade_font.TTF", 32)
+    size(BOARD_W, BOARD_H)
+    background(BACKGROUND_COLOR)
     pass
 
 Enum = {}
@@ -1242,8 +1242,56 @@ class GUI:
         self.start_menu = ["START GAME", "EXIT"]
         self.pause_menu = ["CONTINUE", "EXIT"]
         self.end_menu   = ["RETRY", "EXIT"]
-    
-    
+
+    def apply_menu_choice(self):
+        global GAME_STATE
+        current_menu = None
+
+        if GAME_STATE == 0:
+            current_menu = self.start_menu
+        elif GAME_STATE == 2:
+            current_menu = self.pause_menu
+        elif GAME_STATE == 3:
+            current_menu = self.end_menu
+
+        if current_menu is None:
+            return  # No menu active, do nothing
+
+        choice = current_menu[self.selected]  # Get selected option
+
+        # Change game state based on choice
+        if choice in ("START GAME", "CONTINUE", "RETRY"):
+            GAME_STATE = 1  # Enter gameplay
+        elif choice == "EXIT":
+            self.quit_game()
+
+        print("Menu choice:", choice, "| GAME_STATE now:", GAME_STATE)
+
+
+    def draw_donkey_kong_animation(self):
+        # Alternate every 2 seconds (~120 frames)
+        if (frameCount // 120) % 2 == 0:
+            image(gui_kong_idle,
+                BOARD_W/2 - 100,
+                BOARD_H * 0.28 - 32,
+                200, 128)
+        else:
+            # Show pounding animation (2 frames, each 200x128)
+            frame_width = 200
+            frame_height = 128
+            current_frame = (frameCount // 15) % 2  # Slow toggle between 2 frames
+
+            sx = current_frame * frame_width
+            sy = 0
+
+            image(gui_kong_pounding,
+                BOARD_W/2 - 100,
+                BOARD_H * 0.28 - 32,
+                200, 128,
+                sx, sy,
+                sx + frame_width, sy + frame_height)
+
+
 
     # Menu Drawer
     def draw_menu(self, items, base_y):
@@ -1253,70 +1301,91 @@ class GUI:
         for i, option in enumerate(items):
             x = BOARD_W/2
             y = base_y + i*spacing
-            fill(255,0,0) if i == self.selected else fill(255)
-            text(option, x, y)
 
-            # draw Mario cursor
             if i == self.selected:
-                tw = textWidth(option)
-                image(gui_mario_hammer_icon,
-                      x - tw/2 - 40,
-                      y - gui_mario_hammer_icon.height)
+                fill(255,0,0)
+            else:
+                fill(255)
 
-    # Individual Screens
+            text(option, x - textWidth(option)/2, y)
+
+            # if i == self.selected:
+            #     tw = textWidth(option)
+            #     image(gui_mario_hammer_icon,
+            #         x - tw/2 - 60,
+            #         y - 64,
+            #         64, 64)
+
+    # --- START SCREEN ---
     def draw_start(self):
         background(0)
         textFont(title_font)
         fill(0,150,255)
-        text("DONKEY KONG", BOARD_W/2, BOARD_H*0.15)
-        image(gui_kong_idle, BOARD_W/2 - 100, BOARD_H*0.28)
-        self.draw_menu(self.start_menu, BOARD_H*0.60)
 
+        title = "DONKEY KONG"
+        text(title, BOARD_W/2 - textWidth(title)/2, BOARD_H * 0.15)
+
+        self.draw_donkey_kong_animation()
+        self.draw_menu(self.start_menu, BOARD_H * 0.60)
+
+    # --- PAUSE SCREEN ---
     def draw_pause(self):
         background(0)
         textFont(title_font)
         fill(255)
-        text("PAUSED", BOARD_W/2, BOARD_H*0.25)
+
+        pause_text = "PAUSED"
+        text(pause_text, BOARD_W/2 - textWidth(pause_text)/2, BOARD_H*0.25)
+
         self.draw_menu(self.pause_menu, BOARD_H*0.55)
 
+    # --- END SCREEN ---
     def draw_end(self):
         background(0)
 
         if DID_WIN:
-            image(gui_princess_icon, BOARD_W/2 - 36, BOARD_H*0.18)
+            image(gui_princess_icon,
+                BOARD_W/2 - 36,
+                BOARD_H*0.18 - 64,
+                72, 128)
         else:
-            image(gui_mario_angel_icon, BOARD_W/2 - 36, BOARD_H*0.18)
+            image(gui_mario_angel_icon,
+                BOARD_W/2 - 64,
+                BOARD_H*0.18 - 64,
+                128, 128)
 
         textFont(title_font)
         fill(255)
-        text("GAME OVER", BOARD_W/2, BOARD_H*0.45)
+
+        gameover = "GAME OVER"
+        text(gameover, BOARD_W/2 - textWidth(gameover)/2, BOARD_H*0.45)
+
         textFont(menu_font)
-        text("FINAL SCORE: " + str(SCORE), BOARD_W/2, BOARD_H*0.58)
+
+        score_text = "FINAL SCORE: " + str(SCORE)
+        text(score_text, BOARD_W/2 - textWidth(score_text)/2, BOARD_H*0.58)
+
         self.draw_menu(self.end_menu, BOARD_H*0.75)
 
-    
     def handle_selection(self):
         global GAME_STATE
-
-        # Initialize the variable to handle cases where no state matches
-        current_menu = None
-
-        # Check each state explicitly
+        current_menu = None      
         if GAME_STATE == 0:
             current_menu = self.start_menu
         elif GAME_STATE == 2:
             current_menu = self.pause_menu
         elif GAME_STATE == 3:
             current_menu = self.end_menu
-
-        # Make sure we actually found a menu before trying to access the list
+      
         if current_menu is not None:
             choice = current_menu[self.selected]
-
-        if choice in ("START GAME", "CONTINUE", "RETRY"):
-            GAME_STATE = 1  
-        elif choice == "EXIT":
-            self.quit_game()
+      
+            if choice != "EXIT":
+                GAME_STATE = 1
+            elif choice == "EXIT":
+                self.quit_game()
+        else:
+            print("  WARNING: current_menu is None for GAME_STATE:", GAME_STATE)
 
     def draw_hud(self, score, lives):
         textFont(menu_font)
@@ -1336,8 +1405,9 @@ class GUI:
 
     def quit_game(self):
         exit()
-    
-    def draw(self):
+
+    def display(self):
+
         if GAME_STATE == 0:
             self.draw_start()
         elif GAME_STATE == 2:
@@ -1507,7 +1577,7 @@ class Game:
     def Render(self, dt):
        
         if GAME_STATE != 1:
-            gui.draw()
+            gui.display()
             pass
        
         if GAME_STATE == 1:
@@ -1528,12 +1598,12 @@ class Game:
         
     def PostRender(self, dt):
         if GAME_STATE != 1:
-            gui.draw()
+            gui.display()
             pass
        
         if GAME_STATE == 1:
             gui.draw_hud(SCORE, NUM_LIVES)
-            
+
         # Post processing after frame has been drawn. remove all garbage, etc.
         
         #for i in self.Workspace.GetChildren():
@@ -1588,20 +1658,18 @@ Timestamp = time.time()
 
 #temporary game input for player
 def keyPressed():
-    
     global GAME_STATE
 
+    if keyCode == 32:
+        gui.handle_selection()
+    
     # Menu Navigation (Start, Pause, End screens)
     if GAME_STATE != 1:
         if keyCode == DOWN:
             gui.selected = (gui.selected + 1) % gui.menu_length()
         elif keyCode == UP:
             gui.selected = (gui.selected - 1) % gui.menu_length()
-        elif keyCode == ENTER:
-            gui.handle_selection()
-
     elif GAME_STATE == 1:
-        gui.handle_player_input(game.localPlayer, keyCode)
 
         if keyCode == LEFT:
             game.localPlayer.move_left()
@@ -1610,10 +1678,10 @@ def keyPressed():
         if keyCode == 32:
             game.localPlayer.jump()
         if keyCode == UP:
-            game.localPlayer.climbDirection = UP
-    
-        if keyCode == ESC:  
+            game.localPlayer.climbDirection = UP    
+        if keyCode == 80:  
             GAME_STATE = 2
+
 
     
 def keyReleased():
