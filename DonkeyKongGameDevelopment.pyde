@@ -40,6 +40,7 @@ donkey_blue_barrel_drop = loadImage(PATH + "donkey_blue_barrel_drop.png")
 
 # INFRASTRUCTURE
 platform_red = loadImage(PATH + "platform_red.png")
+platform_blue = loadImage(PATH + "platform_blue.png")
 ladder_image = loadImage(PATH + "ladder_white.png")
 screw = loadImage(PATH + "screw.png")
 
@@ -1442,7 +1443,7 @@ class Player(Instance):
 class Platform(Instance):
     
     #Intial variables that have 2 points as the initial points
-    def __init__(self, P1=Vector2(0,100), P2=Vector2(BOARD_W,200)):
+    def __init__(self, P1=Vector2(0,100), P2=Vector2(BOARD_W,200), isBlue=False):
         
         Instance.__init__(self, "Platform", Enum["ENUM_TYPE"]["PLATFORM"], True, True)
         
@@ -1452,6 +1453,8 @@ class Platform(Instance):
         d = P2 - P1
         
         self.P2 = d.unit().rmul((d.magnitude() // 16) * 16).vadd(P1)
+        
+        self.isBlue = isBlue
         
     def update(self, dt):
         pass
@@ -1468,7 +1471,11 @@ class Platform(Instance):
             tile_position = unit_direction.rmul(16 * i).vadd(self.P1)
             stroke(255)         
             fill(255, 0, 0) 
-            image(platform_red, tile_position.x, tile_position.y, 32, 32, 0, 0, 32, 32)
+            if not self.isBlue:
+                image(platform_red, tile_position.x, tile_position.y, 32, 32, 0, 0, 32, 32)
+            else:
+                image(platform_blue, tile_position.x, tile_position.y, 32, 32, 0, 0, 32, 32)
+
             
 class GUI:
     def __init__(self):
@@ -2011,9 +2018,94 @@ def assemble_level_1():
     new_screw = Screw(Vector2(250, 300))
     game.Workspace.AddChild(new_screw)
 
-    first = platforms[1]    
-    #hammer1 = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
-    #game.Workspace.AddChild(hammer1)
+    hammer1 = Item(Vector2(50, 190), "HAMMER", 10)
+    game.Workspace.AddChild(hammer1)
+
+    hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
+    game.Workspace.AddChild(hammer2)
+
+    start_p = platforms[0]    
+    game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
+    game.Workspace.AddChild(game.oil_barrel_item)
+
+    static_barrels = [
+        Item(Vector2(16, 116), "BARREL_STATIC", 30),
+        Item(Vector2(16, 84), "BARREL_STATIC", 30),
+        Item(Vector2(42, 116), "BARREL_STATIC", 30),
+        Item(Vector2(42, 84), "BARREL_STATIC", 30) 
+    ]
+
+    for sb in static_barrels:
+        game.Workspace.AddChild(sb)
+        
+def assemble_level_2():
+    platforms = [
+        Platform(Vector2(0-16, BOARD_H-16), Vector2(BOARD_W+16, BOARD_H-16), True),
+
+        Platform(Vector2(32, BOARD_H - 16-64), Vector2(32*4, BOARD_H - 16-64), True),
+        Platform(Vector2(32*4 + 32, BOARD_H - 16-64), Vector2(BOARD_W - 32*4-32, BOARD_H - 16-64), True),
+        Platform(Vector2(BOARD_W - 32-16, BOARD_H - 16-64), Vector2(BOARD_W - 32*4-16, BOARD_H - 16-64), True),
+        
+        Platform(Vector2(32*2, BOARD_H - 16-64*2), Vector2(32*4, BOARD_H - 16-64*2), True),
+        Platform(Vector2(32*4 + 32, BOARD_H - 16-64), Vector2(BOARD_W - 32*4-32, BOARD_H - 16-64), True),
+        Platform(Vector2(BOARD_W - 32*2-16, BOARD_H - 16-64), Vector2(BOARD_W - 32*4-16, BOARD_H - 16-64), True),
+        
+        
+        
+        Platform(Vector2(230, 70), Vector2(346, 70), True),
+        
+        Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320), True)
+    ]
+
+    Obstacles = [
+        #Barrel(Vector2(100, 0)),
+        #BlueBarrel(Vector2(100, 0)),
+        #FireSpirit(Vector2(100, 0))
+    ]
+
+    for p in platforms:
+        game.Workspace.AddChild(p)
+        
+        p.collider.position.origin = p.P1
+        p.collider.position.direction = (p.P2 - p.P1).unit()
+        p.collider.position.magnitude = (p.P2 - p.P1).magnitude()
+        
+    for b in Obstacles:
+        game.Workspace.AddChild(b)
+        
+
+    Ladders = [
+        HalfLadder(Vector2(180, BOARD_H - 100), game.Workspace.Raycast),
+        Ladder(Vector2(400, BOARD_H - 100), game.Workspace.Raycast),
+        
+        Ladder(Vector2(250, BOARD_H - 200), game.Workspace.Raycast),
+        Ladder(Vector2(100, BOARD_H - 200), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(175, BOARD_H - 300), game.Workspace.Raycast),
+        Ladder(Vector2(300, BOARD_H - 300), game.Workspace.Raycast),
+        Ladder(Vector2(475, BOARD_H - 300), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(400, BOARD_H - 400), game.Workspace.Raycast),
+        Ladder(Vector2(225, BOARD_H - 400), game.Workspace.Raycast),
+        Ladder(Vector2(100, BOARD_H - 350), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(270, BOARD_H - 500), game.Workspace.Raycast),
+        Ladder(Vector2(450, BOARD_H - 500), game.Workspace.Raycast),
+        
+        Ladder(Vector2(325, BOARD_H - 510), game.Workspace.Raycast),
+        HalfLadder(Vector2(215, BOARD_H - 550), game.Workspace.Raycast),
+        HalfLadder(Vector2(180, BOARD_H - 550), game.Workspace.Raycast),
+    ]
+
+    for l in Ladders:
+        game.Workspace.AddChild(l)
+        
+    #adding testing screws
+    new_screw = Screw(Vector2(250, 300))
+    game.Workspace.AddChild(new_screw)
+
+    hammer1 = Item(Vector2(50, 190), "HAMMER", 10)
+    game.Workspace.AddChild(hammer1)
 
     hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
     game.Workspace.AddChild(hammer2)
@@ -2032,7 +2124,7 @@ def assemble_level_1():
     for sb in static_barrels:
         game.Workspace.AddChild(sb)
 
-assemble_level_1()
+assemble_level_2()
 
 Timestamp = time.time()
 
@@ -2097,4 +2189,3 @@ def draw():
             game.PostRender(time.time() - Timestamp)
             
         Timestamp = time.time()
-
