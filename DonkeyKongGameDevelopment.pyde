@@ -1943,93 +1943,96 @@ class Game:
 game = Game()
 gui = GUI()
 
-platforms = [
-    Platform(Vector2(0-16, BOARD_H-16), Vector2(200, BOARD_H-16)),
-    Platform(Vector2(208, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
-    
-    Platform(Vector2(0-16, BOARD_H - 16*6-32), Vector2(BOARD_W - 16*2-32, BOARD_H - 16*5-32)),    
-    
-    Platform(Vector2(16*2+32, BOARD_H - 16*8.7 - 32*2), Vector2(BOARD_W+32, BOARD_H - 16*10 -32*2)),
-    
-    Platform(Vector2(0-16, BOARD_H - 16*14.2 - 32*3), Vector2(BOARD_W-16*2-32, BOARD_H - 16*13 -32*3)),
-    
-    Platform(Vector2(16*2+32, BOARD_H - 16*16.9 - 32*4), Vector2(BOARD_W+32, BOARD_H - 16*18.3 -32*4)),
-    
-    Platform(Vector2(208, 132), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21.5 -32*5)),
-    Platform(Vector2(0-16, 132), Vector2(200, 132)),
-    
-    Platform(Vector2(230, 70), Vector2(346, 70)),
-    
-    Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320))
-]
+def assemble_level_1():
+    platforms = [
+        Platform(Vector2(0-16, BOARD_H-16), Vector2(200, BOARD_H-16)),
+        Platform(Vector2(208, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
+        
+        Platform(Vector2(0-16, BOARD_H - 16*6-32), Vector2(BOARD_W - 16*2-32, BOARD_H - 16*5-32)),    
+        
+        Platform(Vector2(16*2+32, BOARD_H - 16*8.7 - 32*2), Vector2(BOARD_W+32, BOARD_H - 16*10 -32*2)),
+        
+        Platform(Vector2(0-16, BOARD_H - 16*14.2 - 32*3), Vector2(BOARD_W-16*2-32, BOARD_H - 16*13 -32*3)),
+        
+        Platform(Vector2(16*2+32, BOARD_H - 16*16.9 - 32*4), Vector2(BOARD_W+32, BOARD_H - 16*18.3 -32*4)),
+        
+        Platform(Vector2(208, 132), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21.5 -32*5)),
+        Platform(Vector2(0-16, 132), Vector2(200, 132)),
+        
+        Platform(Vector2(230, 70), Vector2(346, 70)),
+        
+        Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320))
+    ]
 
-Obstacles = [
-    #Barrel(Vector2(100, 0)),
-    #BlueBarrel(Vector2(100, 0)),
-    #FireSpirit(Vector2(100, 0))
-]
+    Obstacles = [
+        #Barrel(Vector2(100, 0)),
+        #BlueBarrel(Vector2(100, 0)),
+        #FireSpirit(Vector2(100, 0))
+    ]
 
-for p in platforms:
-    game.Workspace.AddChild(p)
-    
-    p.collider.position.origin = p.P1
-    p.collider.position.direction = (p.P2 - p.P1).unit()
-    p.collider.position.magnitude = (p.P2 - p.P1).magnitude()
-    
-for b in Obstacles:
-    game.Workspace.AddChild(b)
-    
+    for p in platforms:
+        game.Workspace.AddChild(p)
+        
+        p.collider.position.origin = p.P1
+        p.collider.position.direction = (p.P2 - p.P1).unit()
+        p.collider.position.magnitude = (p.P2 - p.P1).magnitude()
+        
+    for b in Obstacles:
+        game.Workspace.AddChild(b)
+        
 
-Ladders = [
-    HalfLadder(Vector2(180, BOARD_H - 100), game.Workspace.Raycast),
-    Ladder(Vector2(400, BOARD_H - 100), game.Workspace.Raycast),
-    
-    Ladder(Vector2(250, BOARD_H - 200), game.Workspace.Raycast),
-    Ladder(Vector2(100, BOARD_H - 200), game.Workspace.Raycast),
-    
-    HalfLadder(Vector2(175, BOARD_H - 300), game.Workspace.Raycast),
-    Ladder(Vector2(300, BOARD_H - 300), game.Workspace.Raycast),
-    Ladder(Vector2(475, BOARD_H - 300), game.Workspace.Raycast),
-    
-    HalfLadder(Vector2(400, BOARD_H - 400), game.Workspace.Raycast),
-    Ladder(Vector2(225, BOARD_H - 400), game.Workspace.Raycast),
-    Ladder(Vector2(100, BOARD_H - 350), game.Workspace.Raycast),
-    
-    HalfLadder(Vector2(270, BOARD_H - 500), game.Workspace.Raycast),
-    Ladder(Vector2(450, BOARD_H - 500), game.Workspace.Raycast),
-    
-    Ladder(Vector2(325, BOARD_H - 510), game.Workspace.Raycast),
-    HalfLadder(Vector2(215, BOARD_H - 550), game.Workspace.Raycast),
-    HalfLadder(Vector2(180, BOARD_H - 550), game.Workspace.Raycast),
-]
+    Ladders = [
+        HalfLadder(Vector2(180, BOARD_H - 100), game.Workspace.Raycast),
+        Ladder(Vector2(400, BOARD_H - 100), game.Workspace.Raycast),
+        
+        Ladder(Vector2(250, BOARD_H - 200), game.Workspace.Raycast),
+        Ladder(Vector2(100, BOARD_H - 200), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(175, BOARD_H - 300), game.Workspace.Raycast),
+        Ladder(Vector2(300, BOARD_H - 300), game.Workspace.Raycast),
+        Ladder(Vector2(475, BOARD_H - 300), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(400, BOARD_H - 400), game.Workspace.Raycast),
+        Ladder(Vector2(225, BOARD_H - 400), game.Workspace.Raycast),
+        Ladder(Vector2(100, BOARD_H - 350), game.Workspace.Raycast),
+        
+        HalfLadder(Vector2(270, BOARD_H - 500), game.Workspace.Raycast),
+        Ladder(Vector2(450, BOARD_H - 500), game.Workspace.Raycast),
+        
+        Ladder(Vector2(325, BOARD_H - 510), game.Workspace.Raycast),
+        HalfLadder(Vector2(215, BOARD_H - 550), game.Workspace.Raycast),
+        HalfLadder(Vector2(180, BOARD_H - 550), game.Workspace.Raycast),
+    ]
 
-for l in Ladders:
-    game.Workspace.AddChild(l)
-    
-#adding testing screws
-new_screw = Screw(Vector2(250, 300))
-game.Workspace.AddChild(new_screw)
+    for l in Ladders:
+        game.Workspace.AddChild(l)
+        
+    #adding testing screws
+    new_screw = Screw(Vector2(250, 300))
+    game.Workspace.AddChild(new_screw)
 
-first = platforms[1]    
-#hammer1 = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
-#game.Workspace.AddChild(hammer1)
+    first = platforms[1]    
+    #hammer1 = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
+    #game.Workspace.AddChild(hammer1)
 
-hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
-game.Workspace.AddChild(hammer2)
+    hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
+    game.Workspace.AddChild(hammer2)
 
-start_p = platforms[0]    
-game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
-game.Workspace.AddChild(game.oil_barrel_item)
+    start_p = platforms[0]    
+    game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
+    game.Workspace.AddChild(game.oil_barrel_item)
 
-static_barrels = [
-    Item(Vector2(16, 116), "BARREL_STATIC", 30),
-    Item(Vector2(16, 84), "BARREL_STATIC", 30),
-    Item(Vector2(42, 116), "BARREL_STATIC", 30),
-    Item(Vector2(42, 84), "BARREL_STATIC", 30) 
-]
+    static_barrels = [
+        Item(Vector2(16, 116), "BARREL_STATIC", 30),
+        Item(Vector2(16, 84), "BARREL_STATIC", 30),
+        Item(Vector2(42, 116), "BARREL_STATIC", 30),
+        Item(Vector2(42, 84), "BARREL_STATIC", 30) 
+    ]
 
-for sb in static_barrels:
-    game.Workspace.AddChild(sb)
+    for sb in static_barrels:
+        game.Workspace.AddChild(sb)
+
+assemble_level_1()
 
 Timestamp = time.time()
 
@@ -2094,3 +2097,4 @@ def draw():
             game.PostRender(time.time() - Timestamp)
             
         Timestamp = time.time()
+
