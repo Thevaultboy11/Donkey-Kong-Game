@@ -10,7 +10,6 @@ BOARD_W = int(224*2.5)
 BOARD_H = int(256*2.5)
 BACKGROUND_COLOR = 000
 
-#Path For Images
 PATH = os.getcwd() + "/data/"
 
 #GLOBAL VARIABLES
@@ -21,6 +20,7 @@ GAME_STATE = 0
 DID_WIN = False
 DID_LOSE_LIFE = False
 
+#GLOBAL IMAGES
 
 # MARIO
 mario_running = loadImage(PATH + "mario_running.png")
@@ -56,13 +56,14 @@ fire_sprit_blue = loadImage(PATH + "fire_spirit_blue.png")
 # STATIC ITEMS
 oil_barrel = loadImage(PATH + "oil_barrel.png")
 hammer_item = loadImage(PATH + "hammer_item.png")
+static_barrel = loadImage(PATH + "barrel_static.png")
 
 # PARTICLES
 fire_small = loadImage(PATH + "fire_small.png")
+fire_big = loadImage(PATH + "fire_big.png")
 
 #GUI INFRASTRUCTURE
 
-gui_mario_hammer_icon = loadImage(PATH + "gui_mario_hammer3.png")
 gui_mario_angel_icon = loadImage(PATH + "gui_mario_angel.png")
 gui_princess_icon = loadImage(PATH + "gui_princess.png")
 gui_kong_idle = loadImage(PATH + "gui_kong_idle.png")
@@ -71,14 +72,15 @@ gui_kong_pounding = loadImage(PATH + "gui_kong_pounding.png")
 title_font = None
 menu_font  = None
 
-
 def setup():
     # Placeholder for Processing setup; currently unused
+    size(BOARD_W, BOARD_H)
+    background(BACKGROUND_COLOR)
     global title_font, menu_font
     title_font = createFont("kong_arcade_font.TTF", 72)
     menu_font  = createFont("kong_arcade_font.TTF", 32)
-    size(BOARD_W, BOARD_H)
-    background(BACKGROUND_COLOR)
+    
+    #print(gui_mario_hammer_icon, gui_mario_angel_icon, gui_princess_icon, gui_kong_idle, gui_kong_pounding)
     pass
 
 Enum = {}
@@ -329,6 +331,8 @@ class Instance:
         self.enum_type = EnumType
         self.objectId = -1
         
+        self.active = True
+        
         self.anchored = anchored
         self.canCollide = canCollide
         
@@ -448,6 +452,32 @@ class Workspace(Service):
                                                     
         return (intersection, target)
     
+class Debris(Service):
+    
+    def __init__(self, Workspace):
+        
+        Service.__init__(self, "Debris")
+        
+        self.__Workspace = Workspace
+
+        self.__index = 0
+        self.__objects = {}
+        self.__threads = {}
+        
+    def AddItem(self, item, timeout=1):
+        
+        if not self.__objects.get(item.objectId, None):
+            self.__objects[item.objectId] = [item, 0, timeout]
+            
+    def update(self, dt):
+        
+        for d in self.__objects.values():
+            d[1] += dt
+            if d[1] >= d[2]:
+                item = d[0]
+                del self.__objects[item.objectId]
+                self.__Workspace.RemoveChild(item) 
+    
 class Ladder(Instance):
     
     def __init__(self, P=Vector2(0,0), raycast_function=None):
@@ -506,11 +536,14 @@ class Item(Instance):
         self.radius = radius
         self.collider.l = radius  
         self.type = type
+        self.state = 0
         
         self.animations = {
             "HAMMER": Animation(hammer_item, 32, 32, RIGHT, 1),
             "OIL_BARREL": Animation(oil_barrel, 32, 32, RIGHT, 1),
-            "FIRE_SMALL": Animation(fire_small, 32, 32, RIGHT, 2)
+            "FIRE_SMALL": Animation(fire_small, 32, 32, RIGHT, 2),
+            "FIRE_BIG": Animation(fire_big, 32, 32, RIGHT, 2),
+            "BARREL_STATIC": Animation(static_barrel, 32, 32, RIGHT, 1)
         }
     
     def display(self, dt=0):
@@ -518,9 +551,19 @@ class Item(Instance):
         if self.type == "HAMMER":
             self.animations["HAMMER"].play(self.position.x, self.position.y)
         elif self.type == "OIL_BARREL":
+            if self.state == 0:
+                self.animations["FIRE_SMALL"].update(dt + 1/frameRate)
+                self.animations["FIRE_SMALL"].play(self.position.x, self.position.y - 32)
+                self.animations["OIL_BARREL"].play(self.position.x, self.position.y)
+            else:
+                self.animations["FIRE_BIG"].update(dt + 1/frameRate)
+                self.animations["FIRE_BIG"].play(self.position.x, self.position.y - 32)
+                self.animations["OIL_BARREL"].play(self.position.x, self.position.y)
+        elif self.type == "BARREL_STATIC":
+            self.animations["BARREL_STATIC"].play(self.position.x, self.position.y)
+        elif self.type == "SMALL_FIRE_PARTICLE":
             self.animations["FIRE_SMALL"].update(dt + 1/frameRate)
-            self.animations["FIRE_SMALL"].play(self.position.x, self.position.y - 32)
-            self.animations["OIL_BARREL"].play(self.position.x, self.position.y)
+            self.animations["FIRE_SMALL"].play(self.position.x, self.position.y)
             
     
     def update(self, dt):
@@ -553,7 +596,7 @@ class Barrel(Instance):
         self.BASE_POINT = BOARD_H
 
         self.animations = {
-            "SIDE": Animation(barrel_brown_roll_side, 32, 32, RIGHT, 2),
+            "SIDE": Animation(barrel_brown_roll_side, 32, 32, RIGHT, 4),
             "FRONT": Animation(barrel_brown_roll_front, 32, 32, RIGHT, 2)
         }
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
@@ -564,7 +607,12 @@ class Barrel(Instance):
             self.climbDirection = DOWN
         
         # if reached start point, do something, like blue barrel becomes fire spirit
-        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
+        if (self.position - game.startpoint).magnitude() < 50:
+            fire_particle = Item(Vector2(self.position.x, self.position.y - 5), "SMALL_FIRE_PARTICLE", 30)
+            game.Workspace.AddChild(fire_particle)
+            game.Debris.AddItem(fire_particle, 1)
+            
+            self.active = False
             self.move_direction = None
         
         if self.move_direction == LEFT:
@@ -661,13 +709,17 @@ class Barrel(Instance):
 
     def choose_animation_state(self, dt):
 
-        if self.velocity.x != 0:
+        if not self.isClimbing:
             self.current_animation = self.animations["SIDE"]
-            self.current_animation.direction = self.move_direction
+            
+            if self.move_direction == LEFT:
+                self.current_animation.direction = RIGHT
+            else:
+                self.current_animation.direction = LEFT
 
             return
         
-        if self.velocity.x == 0:
+        if self.isClimbing:
             self.current_animation = self.animations["FRONT"]
             self.current_animation.direction = self.move_direction
 
@@ -700,16 +752,16 @@ class BlueBarrel(Instance):
         self.isClimbing = False
         self.climbDirection = None
         #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
-        self.speed = 240
+        self.speed = 200
         self.jump_force  = -180
-        self.climb_velocity = 40
+        self.climb_velocity = 60
         
         self.move_direction = LEFT
         
         self.BASE_POINT = BOARD_H
 
         self.animations = {
-            "SIDE": Animation(barrel_blue_roll_side, 32, 32, RIGHT, 2),
+            "SIDE": Animation(barrel_blue_roll_side, 32, 32, RIGHT, 4),
             "FRONT": Animation(barrel_blue_roll_front, 32, 32, RIGHT, 2)
         }
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
@@ -720,7 +772,8 @@ class BlueBarrel(Instance):
             self.climbDirection = DOWN
         
         # if reached start point, do something, like blue barrel becomes fire spirit
-        if (self.position - game.startpoint).magnitude() < self.collider.l*2:
+        if (self.position - game.startpoint).magnitude() < 50:
+            self.active = False
             self.move_direction = None
         
         if self.move_direction == LEFT:
@@ -816,14 +869,18 @@ class BlueBarrel(Instance):
                 self.move_direction = LEFT
 
     def choose_animation_state(self, dt):
-
-        if self.velocity.x != 0:
+        
+        if not self.isClimbing:
             self.current_animation = self.animations["SIDE"]
-            self.current_animation.direction = self.move_direction
+            
+            if self.move_direction == LEFT:
+                self.current_animation.direction = RIGHT
+            else:
+                self.current_animation.direction = LEFT
 
             return
         
-        if self.velocity.x == 0:
+        if self.isClimbing:
             self.current_animation = self.animations["FRONT"]
             self.current_animation.direction = self.move_direction
 
@@ -1159,18 +1216,18 @@ class Player(Instance):
     def move_left(self):
         self.velocity.x = -self.speed
         
-        if self.direction == RIGHT and self.has_hammer:
-            self.position.x -= 32
-            self.collider.position = self.position
+        #if self.direction == RIGHT and self.has_hammer:
+            #self.position.x -= 32
+            #self.collider.position = self.position
         
         self.direction = LEFT
     
     def move_right(self):
         self.velocity.x = self.speed
         
-        if self.direction == LEFT and self.has_hammer:
-            self.position.x += 32
-            self.collider.position = self.position
+        #if self.direction == LEFT and self.has_hammer:
+            #self.position.x += 32
+            #self.collider.position = self.position
         
         self.direction = RIGHT
 
@@ -1235,7 +1292,7 @@ class Platform(Instance):
             stroke(255)         
             fill(255, 0, 0) 
             image(platform_red, tile_position.x, tile_position.y, 32, 32, 0, 0, 32, 32)
-
+            
 class GUI:
     def __init__(self):
         self.selected = 0
@@ -1414,13 +1471,14 @@ class GUI:
             self.draw_pause()
         elif GAME_STATE == 3:
             self.draw_end()
-
-
+                            
 class Game:
     
     def __init__(self):
         
         self.Workspace = Workspace(200)
+        self.Debris = Debris(self.Workspace)
+        
         self.__idle_threads = {}
         self.__running_threads = {}
         
@@ -1432,12 +1490,12 @@ class Game:
         
         self.Workspace.AddChild(self.localPlayer)
         
-        self.startpoint = Vector2(50, BOARD_H-50)
+        self.startpoint = Vector2(10, BOARD_H-50)
         
         self.barrel_spawn_interval = 4
         self.barrel_spawn_time = 0
         
-        self.blue_barrel_chance = 0.5 # Percent
+        self.blue_barrel_chance = 0.2 # Percent
         
         self.animations = {
             "DONKEY_KONG_IDLE": Animation(donkey_idle, 96, 64, RIGHT, 1),
@@ -1453,16 +1511,37 @@ class Game:
         self.current_donkey_animation = self.animations["DONKEY_KONG_IDLE"]
         
         self.new_barrel_type = None
+        self.new_barrel_obj = None
+        self.barrel_threshold_medium = 5
+        self.barrel_threshold_insane = 10
+        
+        self.burnt_barrels = 0
         
     def PreSimulation(self, dt):
         # Preproccesing for physics simulation
+        
+        if self.burnt_barrels >= self.barrel_threshold_medium:
+            self.barrel_spawn_interval = 3
+            
+            game.oil_barrel_item.state = 1
+            
+            if self.burnt_barrels >= self.barrel_threshold_insane:
+                self.barrel_spawn_interval = 2.2
+                self.blue_barrel_chance = 0.35
                 
+                game.oil_barrel_item.animations["FIRE_BIG"].animation_speed = 0.15
         pass
         
     def Simulation(self, dt):
+        
+        if GAME_STATE != 1:
+            return
+        
         # Iterate through objects in Game.Workspace and do the honors
         collision_detected = True
         updated_instances = {}
+        
+        self.Debris.update(dt)
         
         
             
@@ -1534,12 +1613,26 @@ class Game:
                                     
                                     if intersection:
                                         self.localPlayer.BASE_POINT = intersection.y  - self.localPlayer.collider.collider_aura/2
-                                    
-                                
-                    
+                                                        
         
     def PostSimulation(self, dt):
         # PostProcessing for physics, garbage collection and debris clearing (via Debris service)
+        
+        for i in self.Workspace.GetChildren():
+            if i.active == False:
+                
+                if isinstance(i, BlueBarrel):
+                    new_spirit = FireSpirit(i.position)
+                    new_spirit.direction = RIGHT
+                    new_spirit.move_direction = RIGHT
+                    
+                    self.burnt_barrels += 1
+                    self.Workspace.AddChild(new_spirit)
+                    
+                elif isinstance(i, Barrel):
+                    self.burnt_barrels += 1
+                    
+                self.Workspace.RemoveChild(i)
         pass
         
     def PreRender(self, dt):
@@ -1553,14 +1646,22 @@ class Game:
             if not self.new_barrel_type:
                 if random.randint(1, 100) <= 100*self.blue_barrel_chance:
                     self.new_barrel_type = "BLUE"
+                    self.new_barrel_obj = BlueBarrel(Vector2(160, 116))
                 else:
                     self.new_barrel_type = "BROWN"
+                    self.new_barrel_obj = Barrel(Vector2(160, 116))
+                    
             
             if self.new_barrel_type == "BLUE":
                 self.current_donkey_animation = self.animations["DONKEY_KONG_BLUE_BARREL_DROP"]
                 
             else:
                 self.current_donkey_animation = self.animations["DONKEY_KONG_BROWN_BARREL_DROP"]
+                
+            if self.current_donkey_animation.slice == 2 and self.new_barrel_obj:
+                self.new_barrel_obj.move_direction = RIGHT
+                game.Workspace.AddChild(self.new_barrel_obj)
+                self.new_barrel_obj = None
                 
             
             
@@ -1569,22 +1670,24 @@ class Game:
                 self.current_donkey_animation.slice = 0
                 self.current_donkey_animation.animation_timer = 0
                 self.current_donkey_animation = self.animations["DONKEY_KONG_IDLE"]
+                
                 self.new_barrel_type = None
+                
                 
         else:
             self.current_donkey_animation = self.animations["DONKEY_KONG_IDLE"]
         
     def Render(self, dt):
-       
+        # Iterate through objects in Game.Workspace and do the honors, run every thread here
+        
         if GAME_STATE != 1:
             gui.display()
+            return
             pass
        
         if GAME_STATE == 1:
             gui.draw_hud(SCORE, NUM_LIVES)
-       
-       
-        # Iterate through objects in Game.Workspace and do the honors, run every thread here
+            pass
         
         for i in self.Workspace.GetChildren():
             if not i.enum_type == Enum["ENUM_TYPE"]["PLAYER"]:
@@ -1594,41 +1697,44 @@ class Game:
             
         self.current_donkey_animation.update(dt + 1/frameRate)
         self.current_donkey_animation.play(100, 100)
-        game.localPlayer.display(dt)
+        
+        self.localPlayer.display(dt)
+        
+        #self.__running_threads[self.localPlayer.objectId] = threading.Thread(target = self.localPlayer.display, args = (dt))
+        #self.__running_threads[self.localPlayer.objectId].start()
         
     def PostRender(self, dt):
-        if GAME_STATE != 1:
-            gui.display()
-            pass
-       
-        if GAME_STATE == 1:
-            gui.draw_hud(SCORE, NUM_LIVES)
-
         # Post processing after frame has been drawn. remove all garbage, etc.
         
         #for i in self.Workspace.GetChildren():
             #if self.__running_threads.get(i.objectId, False):
-                #self.__running_threads[i.objectId].join()
-                #del self.__running_threads[i.objectId]
+                #try:
+                    #self.__running_threads[i.objectId].join()
+                    #del self.__running_threads[i.objectId]
+                #except:
+                    #print("CRITICAL ERROR")
             
         self._RenderPipelineRunning = False
 
 #Creating the testing class Player and platforms.
 game = Game()
 gui = GUI()
+
 platforms = [
-    Platform(Vector2(0-16, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
+    Platform(Vector2(0-16, BOARD_H-16), Vector2(200, BOARD_H-16)),
+    Platform(Vector2(208, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
     Platform(Vector2(0-16, BOARD_H - 16*6-32), Vector2(BOARD_W - 16*2-32, BOARD_H - 16*5-32)),    
     Platform(Vector2(16*2+32, BOARD_H - 16*8.7 - 32*2), Vector2(BOARD_W+32, BOARD_H - 16*10 -32*2)),
     Platform(Vector2(0-16, BOARD_H - 16*14.2 - 32*3), Vector2(BOARD_W-16*2-32, BOARD_H - 16*13 -32*3)),
     Platform(Vector2(16*2+32, BOARD_H - 16*16.9 - 32*4), Vector2(BOARD_W+32, BOARD_H - 16*18.3 -32*4)),
-    Platform(Vector2(0-16, BOARD_H - 16*21.5 - 32*5), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21 -32*5))
+    Platform(Vector2(208, 132), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21.5 -32*5)),
+    Platform(Vector2(0-16, 132), Vector2(200, 132))
 ]
 
 Obstacles = [
-    Barrel(Vector2(100, 0)),
-    BlueBarrel(Vector2(100, 0)),
-    FireSpirit(Vector2(100, 0))
+    #Barrel(Vector2(100, 0)),
+    #BlueBarrel(Vector2(100, 0)),
+    #FireSpirit(Vector2(100, 0))
 ]
 
 for p in platforms:
@@ -1647,12 +1753,23 @@ game.Workspace.AddChild(ladder_test)
 ladder_test2 = Ladder(Vector2(200, 300), game.Workspace.Raycast)
 game.Workspace.AddChild(ladder_test2)
 
-first = platforms[0]    
-hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 30)
+first = platforms[1]    
+hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
 game.Workspace.AddChild(hammer)
 
-oil_barrel_item = Item(Vector2((first.P1.x + 40), first.P1.y - 16), "OIL_BARREL", 30)
-game.Workspace.AddChild(oil_barrel_item)
+start_p = platforms[0]    
+game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
+game.Workspace.AddChild(game.oil_barrel_item)
+
+static_barrels = [
+    Item(Vector2(16, 116), "BARREL_STATIC", 30),
+    Item(Vector2(16, 84), "BARREL_STATIC", 30),
+    Item(Vector2(42, 116), "BARREL_STATIC", 30),
+    Item(Vector2(42, 84), "BARREL_STATIC", 30) 
+]
+
+for sb in static_barrels:
+    game.Workspace.AddChild(sb)
 
 Timestamp = time.time()
 
@@ -1681,9 +1798,7 @@ def keyPressed():
             game.localPlayer.climbDirection = UP    
         if keyCode == 80:  
             GAME_STATE = 2
-
-
-    
+        
 def keyReleased():
     if keyCode == LEFT or keyCode == RIGHT:
         game.localPlayer.stop()
