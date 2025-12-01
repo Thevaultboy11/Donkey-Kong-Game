@@ -41,6 +41,8 @@ donkey_blue_barrel_drop = loadImage(PATH + "donkey_blue_barrel_drop.png")
 # INFRASTRUCTURE
 platform_red = loadImage(PATH + "platform_red.png")
 ladder_image = loadImage(PATH + "ladder_white.png")
+screw = loadImage(PATH + "screw.png")
+
 
 # BARRELS
 barrel_brown_roll_side = loadImage(PATH + "brown_barrel_roll_side.png")
@@ -53,6 +55,9 @@ barrel_blue_roll_front = loadImage(PATH + "blue_barrel_roll_front.png")
 fire_sprit_orange = loadImage(PATH + "fire_spirit_orange.png")
 fire_sprit_blue = loadImage(PATH + "fire_spirit_blue.png")
 
+princess_scared = loadImage(PATH + "princess_worried.png")
+princess_idle = loadImage(PATH + "princess_idle.png")
+
 # STATIC ITEMS
 oil_barrel = loadImage(PATH + "oil_barrel.png")
 hammer_item = loadImage(PATH + "hammer_item.png")
@@ -61,6 +66,11 @@ static_barrel = loadImage(PATH + "barrel_static.png")
 # PARTICLES
 fire_small = loadImage(PATH + "fire_small.png")
 fire_big = loadImage(PATH + "fire_big.png")
+score_100 = loadImage(PATH + "score_100.png")
+score_500 = loadImage(PATH + "score_500.png")
+score_800 = loadImage(PATH + "score_800.png")
+
+barrel_destroy = loadImage(PATH + "hammer_destroy_barrel_particle.png")
 
 #GUI INFRASTRUCTURE
 
@@ -101,7 +111,8 @@ Enum["ENUM_TYPE"] = {
     "LADDER": 104,
     "FIRE_SPIRIT": 105,
     "ITEM": 106,
-    "HALF_LADDER": 107
+    "HALF_LADDER": 107,
+    "SCREW": 108
 }
 
 
@@ -376,7 +387,6 @@ class Animation:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
         else:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
-
 class Workspace(Service):
     
     def __init__(self, gravity=10):
@@ -455,7 +465,7 @@ class Workspace(Service):
                                     target = i
                                                     
         return (intersection, target)
-    
+
 class Debris(Service):
     
     def __init__(self, Workspace):
@@ -478,9 +488,39 @@ class Debris(Service):
         for d in self.__objects.values():
             d[1] += dt
             if d[1] >= d[2]:
-                item = d[0]
-                del self.__objects[item.objectId]
-                self.__Workspace.RemoveChild(item) 
+                d[0].active = False
+                del self.__objects[d[0].objectId]
+
+class Screw(Instance):
+    def __init__(self, P=Vector2(0,0), radius=32):
+        Instance.__init__(self, "Screw", Enum["ENUM_TYPE"]["SCREW"], True, False)
+        
+        self.position = P
+        self.isShowing = True
+        self.collider = Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], self.position)
+        self.collider.l = radius  
+        self.radius = radius
+
+    def update(self ,dt=0):
+        # Update the collider's position to match screw
+        self.collider.position = self.position
+
+        # Check collision with player — but only if showing
+        if self.isShowing:
+            player = game.localPlayer
+            if self.collider.circle_collision(self.collider, player.collider):
+                # Check if player is touching TOP of the screw
+
+                # Player must be slightly ABOVE the screw
+                if player.position.y <= self.position.y - 10:
+                    self.isShowing = False
+                    self.active = False   # remove from game workspace
+                    game.Workspace.RemoveChild(self)
+
+    def display(self, dt=0):
+        if self.isShowing:
+            image(screw, self.position.x, self.position.y+20, 24, 24, 0, 0, 30, 32)
+
 
 class HalfLadder(Instance):
     
@@ -528,16 +568,15 @@ class HalfLadder(Instance):
             number_of_ladders = int(self.height // 32)
             if self.height % 32 > 0:
                 number_of_ladders += 1
-            middle_start = number_of_ladders // 3            
-            middle_end = (number_of_ladders * 2) // 3
+            #middle_start = number_of_ladders // 3            
+            #middle_end = (number_of_ladders * 2) // 3
             
             for num in range(0, number_of_ladders):
-                if num >= middle_start and num <= middle_end:
+                if num == number_of_ladders // 2:
                     pass
                 else:
                     image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
-            
-
+    
 class Ladder(Instance):
     
     def __init__(self, P=Vector2(0,0), raycast_function=None):
@@ -603,13 +642,23 @@ class Item(Instance):
             "OIL_BARREL": Animation(oil_barrel, 32, 32, RIGHT, 1),
             "FIRE_SMALL": Animation(fire_small, 32, 32, RIGHT, 2),
             "FIRE_BIG": Animation(fire_big, 32, 32, RIGHT, 2),
-            "BARREL_STATIC": Animation(static_barrel, 32, 32, RIGHT, 1)
+            "BARREL_STATIC": Animation(static_barrel, 32, 32, RIGHT, 1),
+            "BARREL_DESTROY": Animation(barrel_destroy, 32, 32, RIGHT, 4),
+            "SCORE_100": Animation(score_100, 32, 32, RIGHT, 1),
+            "SCORE_500": Animation(score_500, 32, 32, RIGHT, 1),
+            "SCORE_800": Animation(score_800, 32, 32, RIGHT, 1),
+            "PRINCESS_SCARED": Animation(princess_scared, 32, 64, RIGHT, 2),
+            "PRINCESS_IDLE": Animation(princess_idle, 32, 64, RIGHT, 1),
         }
+        
+        self.animations["BARREL_DESTROY"].animation_speed = 0.25
+        self.animations["PRINCESS_SCARED"].animation_speed = 0.5
     
     def display(self, dt=0):
         
         if self.type == "HAMMER":
             self.animations["HAMMER"].play(self.position.x, self.position.y)
+            
         elif self.type == "OIL_BARREL":
             if self.state == 0:
                 self.animations["FIRE_SMALL"].update(dt + 1/frameRate)
@@ -619,11 +668,32 @@ class Item(Instance):
                 self.animations["FIRE_BIG"].update(dt + 1/frameRate)
                 self.animations["FIRE_BIG"].play(self.position.x, self.position.y - 32)
                 self.animations["OIL_BARREL"].play(self.position.x, self.position.y)
+                
         elif self.type == "BARREL_STATIC":
             self.animations["BARREL_STATIC"].play(self.position.x, self.position.y)
+            
         elif self.type == "SMALL_FIRE_PARTICLE":
             self.animations["FIRE_SMALL"].update(dt + 1/frameRate)
             self.animations["FIRE_SMALL"].play(self.position.x, self.position.y)
+            
+        elif self.type == "BARREL_DESTROY_PARTICLE":
+            self.animations["BARREL_DESTROY"].update(dt + 1/frameRate)
+            self.animations["BARREL_DESTROY"].play(self.position.x, self.position.y)
+            
+        elif self.type == "SCORE_100" or self.type == "SCORE_500" or self.type == "SCORE_800":
+            self.animations[self.type].play(self.position.x, self.position.y-16)
+            
+        elif self.type == "PRINCESS":
+            if self.state == 1:
+                if self.animations["PRINCESS_SCARED"].animation_timer > 0.45:
+                    self.state = 0
+                    self.animations["PRINCESS_SCARED"].animation_timer = 0
+                    
+                self.animations["PRINCESS_SCARED"].update(dt + 1/frameRate)
+                self.animations["PRINCESS_SCARED"].play(self.position.x, self.position.y)
+            else:
+                self.animations["PRINCESS_IDLE"].play(self.position.x, self.position.y)
+            
             
     
     def update(self, dt):
@@ -1082,6 +1152,25 @@ class FireSpirit(Instance):
                         self.isClimbing = False
                         self.anchored = False
                         self.climbDirection = None
+                        
+                    if bottom.y - 20 >= self.position.y >= top.y - self.collider.l-5:
+                        if self.climbDirection == DOWN and not self.isClimbing:
+                            self.isClimbing = True
+                            self.anchored = True
+                            
+                        elif self.climbDirection == DOWN:
+                            self.position.y += self.climb_velocity * dt
+                            self.velocity.y = 0
+
+                    elif self.isClimbing and self.climbDirection == DOWN:
+                        
+                        if bottom.y - 10 >= self.position.y >= bottom.y - self.collider.l-20:
+                            self.isClimbing = False
+                            self.anchored = False
+                            self.climbDirection = None
+                        else:
+                            self.isClimbing = True
+                            self.anchored = True
 
                             
         self.collider.position = self.position  
@@ -1135,7 +1224,7 @@ class Player(Instance):
         self.isClimbing = False
         #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
         self.speed = 120
-        self.jump_force  = -180
+        self.jump_force  = -130
         self.climb_velocity = 30
         
         self.BASE_POINT = BOARD_H
@@ -1161,6 +1250,8 @@ class Player(Instance):
 
         self.current_animation = self.animations["IDLE"]
         self.direction = RIGHT
+        
+        self.barrel_score_debounce = 0
 
     def choose_animation_state(self, dt):
         
@@ -1207,6 +1298,10 @@ class Player(Instance):
 
     def update(self, dt):
         
+        global SCORE
+        
+        self.barrel_score_debounce -= dt
+        
         #applying the gravity
         self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
@@ -1240,7 +1335,7 @@ class Player(Instance):
         
         for child in game.Workspace.GetChildren():        
             
-            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"]:
+            if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] and not self.has_hammer:
                 ladder = child
                 
                 top = ladder.top_pos
@@ -1266,7 +1361,29 @@ class Player(Instance):
                             
                         else:
                             self.isClimbing = True
-                            self.anchored = True    
+                            self.anchored = True
+                            
+            elif child.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
+                
+                if abs(self.position.x - child.position.x) <= 10:
+                    
+                    if child.position.y - 8 >= self.position.y >= child.position.y - 64:
+                        
+                        if isinstance(child, FireSpirit):
+                            pass
+                            # LIFE LOST
+                        elif isinstance(child, Barrel) or isinstance(child, BlueBarrel):
+                            
+                            if self.barrel_score_debounce > 0.5:
+                                pass
+                            elif not self.isClimbing:
+                                self.barrel_score_debounce = 1
+                                SCORE += 100
+                            
+                                score_particle = Item(Vector2(child.position.x, child.position.y), "SCORE_100", 30)
+                                game.Workspace.AddChild(score_particle)
+                        
+                                game.Debris.AddItem(score_particle, 1)
                             
         self.collider.position = self.position  
 
@@ -1382,7 +1499,7 @@ class GUI:
         elif choice == "EXIT":
             self.quit_game()
 
-        print("Menu choice:", choice, "| GAME_STATE now:", GAME_STATE)
+        #print("Menu choice:", choice, "| GAME_STATE now:", GAME_STATE)
 
 
     def draw_donkey_kong_animation(self):
@@ -1502,7 +1619,8 @@ class GUI:
             elif choice == "EXIT":
                 self.quit_game()
         else:
-            print("  WARNING: current_menu is None for GAME_STATE:", GAME_STATE)
+            #print("  WARNING: current_menu is None for GAME_STATE:", GAME_STATE)
+            pass
 
     def draw_hud(self, score, lives):
         textFont(hud_font)
@@ -1513,7 +1631,6 @@ class GUI:
         text(str(score).zfill(6), BOARD_W, 40)
         text("LIVES ", BOARD_W - 10, 60)
         text(str(lives).zfill(2), BOARD_W, 80)
-      
 
     def menu_length(self):
         if GAME_STATE == 0:
@@ -1581,6 +1698,9 @@ class Game:
         
         self.burnt_barrels = 0
         
+        self.princess = Item(Vector2(240, 43), "PRINCESS", 30)
+        self.Workspace.AddChild(self.princess)
+        
     def PreSimulation(self, dt):
         # Preproccesing for physics simulation
         
@@ -1598,6 +1718,8 @@ class Game:
         
     def Simulation(self, dt):
         
+        global SCORE
+        
         if GAME_STATE != 1:
             return
         
@@ -1605,8 +1727,7 @@ class Game:
         collision_detected = True
         updated_instances = {}
         
-        self.Debris.update(dt)
-        
+        self.Debris.update(dt)       
         
             
         for i in self.Workspace.GetChildren():
@@ -1629,12 +1750,47 @@ class Game:
                         if i.type == "HAMMER" and not game.localPlayer.has_hammer:
                             game.localPlayer.has_hammer = True
                             game.localPlayer.hammer_time = 12
-                            game.localPlayer.collider.l = game.localPlayer.hammer_radius
+                            #game.localPlayer.collider.l = game.localPlayer.hammer_radius
+                            
+                            
                         
                             self.Workspace.RemoveChild(i)
                 if game.localPlayer.has_hammer and i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
-                    if i.collider.circle_collision(game.localPlayer.collider, i.collider):
-                        self.Workspace.RemoveChild(i)
+                    if i.collider.circle_collision(Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], game.localPlayer.position, game.localPlayer.hammer_radius), i.collider):
+                        
+                        if isinstance(i, Barrel) or isinstance(i, BlueBarrel):
+                            SCORE += 500
+                        
+                            destroy_particle = Item(i.position, "BARREL_DESTROY_PARTICLE", 30)
+                            self.Workspace.AddChild(destroy_particle)
+                        
+                            self.Debris.AddItem(destroy_particle, 0.42)
+                        
+                            score_particle = Item(i.position, "SCORE_500", 30)
+                            self.Workspace.AddChild(score_particle)
+                        
+                            self.Debris.AddItem(score_particle, 1)
+                        
+                            self.Workspace.RemoveChild(i)
+                        
+                        elif isinstance(i, FireSpirit):
+                            SCORE += 800
+                        
+                            destroy_particle = Item(i.position, "BARREL_DESTROY_PARTICLE", 30)
+                            self.Workspace.AddChild(destroy_particle)
+                        
+                            self.Debris.AddItem(destroy_particle, 0.42)
+                        
+                            score_particle = Item(i.position, "SCORE_800", 30)
+                            self.Workspace.AddChild(score_particle)
+                        
+                            self.Debris.AddItem(score_particle, 1)
+                        
+                            self.Workspace.RemoveChild(i)
+                            
+        if game.localPlayer.position.x <=225 and game.localPlayer.position.y <= 130:
+            print("OUT_OF_BOUNDS")
+                    
         
         if True:
             return
@@ -1702,6 +1858,9 @@ class Game:
     def PreRender(self, dt):
         # Preprocessing for the frame to render, such as setting up the threads, etc.
         background(0)
+        
+        if random.randint(0, 1000) <= 2:
+            self.princess.state = 1
         
         self.barrel_spawn_time += dt
         if self.barrel_spawn_time >= self.barrel_spawn_interval:
@@ -1787,12 +1946,21 @@ gui = GUI()
 platforms = [
     Platform(Vector2(0-16, BOARD_H-16), Vector2(200, BOARD_H-16)),
     Platform(Vector2(208, BOARD_H - 16), Vector2(BOARD_W+32, BOARD_H - 16*2)),
+    
     Platform(Vector2(0-16, BOARD_H - 16*6-32), Vector2(BOARD_W - 16*2-32, BOARD_H - 16*5-32)),    
+    
     Platform(Vector2(16*2+32, BOARD_H - 16*8.7 - 32*2), Vector2(BOARD_W+32, BOARD_H - 16*10 -32*2)),
+    
     Platform(Vector2(0-16, BOARD_H - 16*14.2 - 32*3), Vector2(BOARD_W-16*2-32, BOARD_H - 16*13 -32*3)),
+    
     Platform(Vector2(16*2+32, BOARD_H - 16*16.9 - 32*4), Vector2(BOARD_W+32, BOARD_H - 16*18.3 -32*4)),
+    
     Platform(Vector2(208, 132), Vector2(BOARD_W-16*2-32, BOARD_H - 16*21.5 -32*5)),
-    Platform(Vector2(0-16, 132), Vector2(200, 132))
+    Platform(Vector2(0-16, 132), Vector2(200, 132)),
+    
+    Platform(Vector2(230, 70), Vector2(346, 70)),
+    
+    Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320))
 ]
 
 Obstacles = [
@@ -1811,17 +1979,43 @@ for p in platforms:
 for b in Obstacles:
     game.Workspace.AddChild(b)
     
-ladder_test = HalfLadder(Vector2(200, 500), game.Workspace.Raycast)
-game.Workspace.AddChild(ladder_test)
 
-ladder_test2 = HalfLadder(Vector2(200, 300), game.Workspace.Raycast)
-game.Workspace.AddChild(ladder_test2)
+Ladders = [
+    HalfLadder(Vector2(180, BOARD_H - 100), game.Workspace.Raycast),
+    Ladder(Vector2(400, BOARD_H - 100), game.Workspace.Raycast),
+    
+    Ladder(Vector2(250, BOARD_H - 200), game.Workspace.Raycast),
+    Ladder(Vector2(100, BOARD_H - 200), game.Workspace.Raycast),
+    
+    HalfLadder(Vector2(175, BOARD_H - 300), game.Workspace.Raycast),
+    Ladder(Vector2(300, BOARD_H - 300), game.Workspace.Raycast),
+    Ladder(Vector2(475, BOARD_H - 300), game.Workspace.Raycast),
+    
+    HalfLadder(Vector2(400, BOARD_H - 400), game.Workspace.Raycast),
+    Ladder(Vector2(225, BOARD_H - 400), game.Workspace.Raycast),
+    Ladder(Vector2(100, BOARD_H - 350), game.Workspace.Raycast),
+    
+    HalfLadder(Vector2(270, BOARD_H - 500), game.Workspace.Raycast),
+    Ladder(Vector2(450, BOARD_H - 500), game.Workspace.Raycast),
+    
+    Ladder(Vector2(325, BOARD_H - 510), game.Workspace.Raycast),
+    HalfLadder(Vector2(215, BOARD_H - 550), game.Workspace.Raycast),
+    HalfLadder(Vector2(180, BOARD_H - 550), game.Workspace.Raycast),
+]
 
-
+for l in Ladders:
+    game.Workspace.AddChild(l)
+    
+#adding testing screws
+new_screw = Screw(Vector2(250, 300))
+game.Workspace.AddChild(new_screw)
 
 first = platforms[1]    
-hammer = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
-game.Workspace.AddChild(hammer)
+#hammer1 = Item(Vector2((first.P1.x + first.P2.x)/2, first.P1.y - 40), "HAMMER", 10)
+#game.Workspace.AddChild(hammer1)
+
+hammer2 = Item(Vector2(400, BOARD_H-180), "HAMMER", 10)
+game.Workspace.AddChild(hammer2)
 
 start_p = platforms[0]    
 game.oil_barrel_item = Item(Vector2((start_p.P1.x + 40), start_p.P1.y - 16), "OIL_BARREL", 30)
@@ -1861,7 +2055,9 @@ def keyPressed():
         if keyCode == 32:
             game.localPlayer.jump()
         if keyCode == UP:
-            game.localPlayer.climbDirection = UP    
+            game.localPlayer.climbDirection = UP
+        if keyCode == DOWN:
+            game.localPlayer.climbDirection = DOWN
         if keyCode == 80:  
             GAME_STATE = 2
         
@@ -1869,6 +2065,8 @@ def keyReleased():
     if keyCode == LEFT or keyCode == RIGHT:
         game.localPlayer.stop()
     if keyCode == UP:
+        game.localPlayer.climbDirection = None
+    if keyCode == DOWN:
         game.localPlayer.climbDirection = None
 
 def draw():
