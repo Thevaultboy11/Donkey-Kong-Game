@@ -1,10 +1,20 @@
-import math          # math helpers (unused currently)
+add_library('minim')
+
 import random        # random utilities (unused currently)
-import threading     # threading hooks for render pipeline (not yet used)
 import time          # timing for delta time
 import os
 
-#Board Global Variables
+###
+"""
+Notes from the Developers:
+    
+    ...
+"""
+###
+
+#Board Global Variables and AudioPlayer
+
+audio_player = Minim(this)
 
 BOARD_W = int(224*2.5)
 BOARD_H = int(256*2.5)
@@ -19,12 +29,26 @@ NUM_LIVES = 2
 GAME_STATE = 0
 DID_WIN = False
 DID_LOSE_LIFE = False
+LEVEL = 1
 
 PLAYER_DEATH_TIMER = 0
 STATE_DEATH = 4
 
 
-#GLOBAL IMAGES
+# SFX
+
+GLOBAL_SOUNDS = { # Dictionary with all the SFX loaded to the audio_player
+    "LOADING_SCREEN": audio_player.loadFile(PATH + "/sfx/loading_screen.wav"),
+    "BACKGROUND_LEVEL_1": audio_player.loadFile(PATH + "/sfx/background_noise_level_1.wav"),
+    "BACKGROUND_LEVEL_2": audio_player.loadFile(PATH + "/sfx/background_noise_level_2.wav"),
+    "HAMMER_TIME": audio_player.loadFile(PATH + "/sfx/hammer_time.wav"),
+    "JUMP_SFX": audio_player.loadFile(PATH + "/sfx/jump_small.wav"),
+    "ITEM_COLLECT": audio_player.loadFile(PATH + "/sfx/pickup_item.wav"),
+    "SCORE_GIVE": audio_player.loadFile(PATH + "/sfx/getting_points.wav"),
+    "LEVEL_2_END": audio_player.loadFile(PATH + "/sfx/ending_level_2.wav")
+}
+
+# SPRITES
 
 # MARIO
 mario_running = loadImage(PATH + "mario_running.png")
@@ -44,6 +68,9 @@ kong_pounding = loadImage(PATH + "kong_pounding.png")
 donkey_barrel_throw = loadImage(PATH + "donkey_barrel_drop.png")
 donkey_brown_barrel_drop = loadImage(PATH + "donkey_brown_barrel_drop.png")
 donkey_blue_barrel_drop = loadImage(PATH + "donkey_blue_barrel_drop.png")
+
+donkey_climbing_ladder = loadImage(PATH + "donkey_climbing_ladder.png")
+donkey_dying = loadImage(PATH + "donkey_kong_screaming_falling.png")
 
 # INFRASTRUCTURE
 platform_red = loadImage(PATH + "platform_red.png")
@@ -81,6 +108,9 @@ score_800 = loadImage(PATH + "score_800.png")
 
 barrel_destroy = loadImage(PATH + "hammer_destroy_barrel_particle.png")
 
+heart_rescaled = loadImage(PATH + "heart_32x.png")
+broken_heart = loadImage(PATH + "broken_heart_32x.png")
+
 #2 LEVEL PICKUP ITEMS
 first_princess_pickup_item = loadImage(PATH + "princess_pickup2.png")
 second_princess_pickup_item = loadImage(PATH + "princess_pickup3.png")
@@ -99,17 +129,22 @@ hud_font = None
 
 def setup():
     # Placeholder for Processing setup; currently unused
+    global GAME_STATE
+    
+    frameRate(50)
     size(BOARD_W, BOARD_H)
     background(BACKGROUND_COLOR)
     global title_font, menu_font, hud_font
     title_font = createFont("kong_arcade_font.TTF", 72)
     menu_font  = createFont("kong_arcade_font.TTF", 32)
     hud_font  = createFont("kong_arcade_font.TTF", 24)
+    
+    textAlign(CENTER, BASELINE)
 
     #print(gui_mario_hammer_icon, gui_mario_angel_icon, gui_princess_icon, gui_kong_idle, gui_kong_pounding)
     pass
 
-Enum = {}
+Enum = {} #Enumerated constants that correspond to INTEGER values for comparisons during runtime.
 
 # 0 - 100
 Enum["COLLIDER_TYPE"] = {
@@ -135,13 +170,13 @@ class Vector:
     # An abstract class for Vectors
     
     def __init__(self):
-        # Base class carries no state; defined for type hierarchy
         pass
     
 class Vector2(Vector):
     # A vector with two components, x and y
     
     def __init__(self, x=0, y=0):
+        # instantiates the Vector
         
         Vector.__init__(self)
         
@@ -149,11 +184,12 @@ class Vector2(Vector):
         self.y = y
         
     def __str__(self):
+        # used for debugging, converts vector into a string of format '(x, y)'
         
         return "(" + str(self.x) + "," + str(self.y) + ")"
         
     def __sub__(self, VectorB):
-        # A -> self
+        # performs vector subtraction, self - VectorB
         
         if isinstance(VectorB, Vector2):
             return Vector2(self.x - VectorB.x, self.y - VectorB.y)
@@ -163,6 +199,7 @@ class Vector2(Vector):
         return Vector2(self.x * r, self.y * r)
     
     def rdiv(self, r):
+        # Scale both components by a scalar
         
         return self.rmul(1/r)
     
@@ -172,7 +209,7 @@ class Vector2(Vector):
             return Vector2(self.x + VectorB.x, self.y + VectorB.y)
         
     def vsub(self, VectorB):
-        # self -> B
+        # same functionality as self.__sub__() but in a different method
         
         if isinstance(VectorB, Vector2):
             return Vector2(VectorB.x - self.x, VectorB.y - self.y)
@@ -182,15 +219,15 @@ class Vector2(Vector):
         return self.x * VectorB.x + self.y * VectorB.y
     
     def perp(self):
-        # Returns a perpendicular vector (rotated 90 degrees)
+        # Returns a perpendicular vector (rotated 90 degrees) to self
         return Vector2(-self.y, self.x)
         
     def magnitude(self):
-        # Euclidean length
+        # Euclidean length of the vector, yields distance or size of the vector
         return (self.x**2 + self.y**2)**0.5
     
     def unit(self):
-        # Normalized vector (length 1)
+        # Normalized vector (length 1) in direction of original vector
         return self.rdiv(self.magnitude())
     
 class Ray2:
@@ -214,6 +251,7 @@ class Collider:
         
     @staticmethod
     def circle_collision(c1, c2):
+        # Checks for the collision between two cirular colliders
         dx = c1.position.x - c2.position.x
         dy = c1.position.y - c2.position.y
 
@@ -221,7 +259,8 @@ class Collider:
         r = (c1.l + c1.collider_aura/2) + (c2.l + c2.collider_aura/2)
 
         return dist_sq <= r*r
-        
+    
+    # DEPRECATED
     def ray2_intersected(self, ray):
         # Computes ray-circle intersection; returns closest hit within ray.magnitude or None
         if self.collider_type == Enum["COLLIDER_TYPE"]["CIRCLE"]:
@@ -308,8 +347,9 @@ class Collider:
                     
                     return ()
                 
-                
+    # DEPRECATED
     def retrace_ray2_collision(self, ray2, v):
+        # Retraces the ray from its collision point.
         
         if self.collider_type == Enum["COLLIDER_TYPE"]["CIRCLE"]:
             
@@ -347,23 +387,23 @@ class Collider:
             return Vector2(C_x + (P_r.x - (P-B).x), C_y + self.l - delta)
                    
 class Service:
-    
+    # The base class for Services that handle important parts of the game's functionality.
     def __init__(self, name):
         # Base service type (e.g., Workspace)
         self.name = name
               
 class Instance:
+    # the base class for Instances, basically almost every object you see rendered in the game. 
     
     def __init__(self, name, EnumType, anchored = False, canCollide = True):
-        # Base instance type with name, enum classification, and object id
         self.name = name
         self.enum_type = EnumType
         self.objectId = -1
         
         self.active = True
         
-        self.anchored = anchored
-        self.canCollide = canCollide
+        self.anchored = anchored # IF anchored is True, the Instance will not be affected by physics
+        self.canCollide = canCollide # If canCollide is True, the Instance can be collided with
         
         self.position = Vector2(0, 0)
         self.velocity = Vector2(0, 0)
@@ -373,9 +413,64 @@ class Instance:
             
         elif EnumType == Enum["ENUM_TYPE"]["PLATFORM"] or EnumType == Enum["ENUM_TYPE"]["LADDER"]:
             self.collider = Collider(Enum["COLLIDER_TYPE"]["LINE"], Ray2(self.position))
+            
+class Sound:
+    # A sound that loads files to audio player every time it is instantiated to avoid 
+    # unintended conflicts and functionality during runtime.
+    
+    def __init__(self, sound_name="", looped=False):
+        
+        self.sound_name = sound_name
+        self.looped = looped
+        
+        self.sounds = GLOBAL_SOUNDS
+        
+        self.__sound = self.sounds[self.sound_name]
+            
+        self.IsPlaying = False # True if the sound is currently playing, False otherwise
+        
+    def Resume(self):
+        # continues playing the sound from current pointer if it is not already playing
+        if not self.IsPlaying:
+            self.IsPlaying = True
+            
+            if self.looped:
+                self.__sound.loop()
+            else:
+                self.__sound.play()
+            
+    def Rewind(self):
+        # changes the internal pointer of the sound to 0 (start)
+        self.__sound.rewind()
+            
+    def Play(self):
+        # continues playing the sound from start if it is not already playing
+        if not self.IsPlaying:
+            self.Rewind()
+            self.Resume()
+        
+    def Stop(self):
+        # Stops the sound if it is playing at the current pointer.
+        if self.IsPlaying:
+            self.IsPlaying = False
+            
+            self.__sound.pause()
+    
+    # DEPRECATED
+    def Halt(self):
+        if self.IsPlaying:
+            
+            self.Stop()
 
-class Animation:    
+class Animation:
+    # used to display sprites in a much more efficient manner than
+    # creating unfathomable amounts of variables for each animation
+    # in their required classes.
+     
     def __init__(self, sprite=None, imageW=32, imageH=32, direction=RIGHT, total_slices=0):
+        # Instantiates the Animation with parameters for its display, facing direction and total slices
+        # that make up the sprite. Sprites can also be made of a single slice
+        
         self.sprite = sprite
         self.img_w = imageW
         self.img_h = imageH
@@ -386,6 +481,8 @@ class Animation:
         self.total_slices = total_slices
 
     def update(self, dt):
+        # Updates the current slice displayed if a preset amount of time has elapsed
+        
         #if there is only one slice then do not update anything.
         if self.total_slices <= 1:
             return
@@ -401,24 +498,41 @@ class Animation:
             self.slice = (self.slice + 1) % self.total_slices
 
     def play(self, xPosition, yPositon):
+        # Displays the animation's current slice with directionality
+        # taken into account.
+        
         if self.direction == RIGHT:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
         elif self.direction == LEFT:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, (self.slice) * (self.img_w+4) + self.img_w, 0, self.slice * (self.img_w+4), self.img_h)
         else:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
+            
 class Workspace(Service):
+    # A service responsible for maintaining Instances in a safe,
+    # ordered manner and provides methods for fetching, adding,
+    # getting all child Instances and removing children.
     
     def __init__(self, gravity=10):
+        # Instantiates a new Workspace with preset gravity that
+        # can be changed on runtime.
         
         Service.__init__(self, "Workspace")
         
         self.gravity = gravity
+        self.__index = 0 # The INTEGER referening the internal pointer of the Workspace
+                         # to keep track of which ObjectId is the next free one.
+        self.__objects = {} # The dictionary containing all key-value pairs of 
+                            # objectId's as Keys and Instances as Values
+        
+    # DANGER: USE CAREFULLY!
+    def ResetCounter(self):
+        # Resets the internal counter of the Workspace
         self.__index = 0
-        self.__objects = {}
         
     def AddChild(self, object):
         # Registers a child instance and returns its object id
+        
         self.__objects[self.__index] = object
         object.objectId = self.__index
         self.__index += 1
@@ -434,11 +548,13 @@ class Workspace(Service):
         return self.__objects.get(objectId, None)
     
     def GetChildren(self):
-        # Returns a list of all childrent in the Workspace
+        # Returns a list of all children in the Workspace
         return self.__objects.values()
     
     def Raycast(self, ray2):
-        # casts ray and does stuff
+        # Casts a ray and returns the Vector2 point of Intersection and the 
+        # Instance intersected with, if any
+        
         intersection = None # Vector2
         target = None # Instance
         
@@ -487,32 +603,50 @@ class Workspace(Service):
         return (intersection, target)
 
 class Debris(Service):
+    # A service that guarantees removal of instances from Workspace
+    # after a preset amount of time.
     
     def __init__(self, Workspace):
+        # instantiates a new Debris service
         
         Service.__init__(self, "Debris")
         
         self.__Workspace = Workspace
 
-        self.__index = 0
-        self.__objects = {}
-        self.__threads = {}
+        self.__index = 0 # Internal counter for the Debris service used in its internal dictionary mappings
+        self.__objects = {} # Internal dictionary mappings for key-Instance pairs processed by Debris Service
+        self.__threads = {} # NOUSE: MultiThreading not implemented
         
     def AddItem(self, item, timeout=1):
+        # Adds a new Instance to DebrisService for processing its guaranteed removal from the game
         
         if not self.__objects.get(item.objectId, None):
             self.__objects[item.objectId] = [item, 0, timeout]
             
     def update(self, dt):
+        # Updates the state of all objects in DebrisService
         
         for d in self.__objects.values():
             d[1] += dt
             if d[1] >= d[2]:
                 d[0].active = False
-                del self.__objects[d[0].objectId]
+                
+                try:
+                    if Workspace.GetChild(d[0].objectId):
+                        Workspace.RemoveChild(d[0])
+                    
+                    else:
+                        del self.__objects[d[0].objectId]
+                except:
+                    del self.__objects[d[0].objectId]
+                    
 
 class Screw(Instance):
+    # An Instance that appears in Level 2 and disappears when the player steps on it
+    # Yeah thats literally its entire existance. What did you expect?
+    
     def __init__(self, P=Vector2(0,0), radius=10):
+        # Instantiates the screw
         Instance.__init__(self, "Screw", Enum["ENUM_TYPE"]["SCREW"], True, False)
         
         self.position = P
@@ -535,10 +669,13 @@ class Screw(Instance):
                 game.Workspace.RemoveChild(self)
 
     def display(self, dt=0):
+        # Display the screw...
         if self.isShowing:
             image(screw, self.position.x, self.position.y+20, 24, 24, 0, 0, 30, 32)
             
 class PrincessPickup(Instance):
+    # Items that spawn in Level 2 and yield score points when collected
+    
     def __init__(self, P=Vector2(0,0), radius=32, type=0):
         Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["PRINCESS_PICKUP"], True, False)
         
@@ -550,7 +687,7 @@ class PrincessPickup(Instance):
         self.type = type
 
     def update(self ,dt=0):
-        
+        # Handle player collections here and sound aswell, since its more streamlined.
         global SCORE
         
         self.collider.position = self.position
@@ -569,7 +706,10 @@ class PrincessPickup(Instance):
                     SCORE += 500
                     game.Workspace.AddChild(score_particle)
                     game.Debris.AddItem(score_particle, 1)
-                    game.Workspace.RemoveChild(self)    
+                    game.Workspace.RemoveChild(self)
+                    
+                    game.item_collect.Stop()
+                    game.item_collect.Play()
 
 
     def display(self, dt=0):
@@ -583,7 +723,7 @@ class PrincessPickup(Instance):
 
 
 class HalfLadder(Instance):
-    
+  
     def __init__(self, P=Vector2(0,0), raycast_function=None):
         Instance.__init__(self, "Halfladder", Enum["ENUM_TYPE"]["HALF_LADDER"], True, False)
         self.position = P
@@ -693,6 +833,9 @@ class Ladder(Instance):
                     image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
             
 class Item(Instance):
+    # A stationary object whose entire purpose is to be rendered and
+    # cease to exist when collected
+    
     def __init__(self, P=Vector2(0,0), type="HAMMER", radius=30):
         Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["ITEM"], True, False)
         self.position =  P
@@ -702,7 +845,7 @@ class Item(Instance):
         self.type = type
         self.state = 0
         
-        self.animations = {
+        self.animations = { # dictionary of Animations
             "HAMMER": Animation(hammer_item, 32, 32, RIGHT, 1),
             "OIL_BARREL": Animation(oil_barrel, 32, 32, RIGHT, 1),
             "FIRE_SMALL": Animation(fire_small, 32, 32, RIGHT, 2),
@@ -716,10 +859,12 @@ class Item(Instance):
             "PRINCESS_IDLE": Animation(princess_idle, 32, 64, RIGHT, 1),
         }
         
+        # Adjusting speed of some animations to look right
         self.animations["BARREL_DESTROY"].animation_speed = 0.25
         self.animations["PRINCESS_SCARED"].animation_speed = 0.5
     
     def display(self, dt=0):
+        # Displays the animation with some custom functionality for some of these cases
         
         if self.type == "HAMMER":
             self.animations["HAMMER"].play(self.position.x, self.position.y)
@@ -765,8 +910,11 @@ class Item(Instance):
         pass
     
 class Barrel(Instance): 
-    #The class only takes the initial position as a vector as arguments.
+    # The barrels rolling around the map that destroy the player on contact,
+    # and can be destroyed by a hammer for points.
+    
     def __init__(self, P=Vector2(0,0)):
+        # instantiates instance including initial... position
         
         Instance.__init__(self, "Barrel", Enum["ENUM_TYPE"]["BARREL"], False, True)
         
@@ -795,8 +943,12 @@ class Barrel(Instance):
             "FRONT": Animation(barrel_brown_roll_front, 32, 32, RIGHT, 2)
         }
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
+        
+        self.current_animation = self.animations["FRONT"]
 
     def update(self, dt):
+        # handles physis and stuff for the barrel, aswell as destruction on reaching end with flame
+        # animation
         
         if random.randint(0, 1000) > 998:
             self.climbDirection = DOWN
@@ -833,7 +985,7 @@ class Barrel(Instance):
             self.position.x += self.velocity.x * dt * (1-self.anchored)
 
         # ground collision (temporary)
-        if self.position.y + self.height/2 > self.BASE_POINT and not self.anchored:
+        if self.position.y + self.height/2 > self.BASE_POINT and not self.anchored and self.canCollide:
             self.position.y = self.BASE_POINT - self.height/2
             self.velocity.y = 0
             self.on_ground = True
@@ -843,6 +995,7 @@ class Barrel(Instance):
         self.collider.position = self.position
         
         for child in game.Workspace.GetChildren():
+            # randomly decides which ladders to descend, if any and then does that
             
             if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] or child.enum_type == Enum["ENUM_TYPE"]["HALF_LADDER"]:
                 ladder = child
@@ -888,6 +1041,7 @@ class Barrel(Instance):
     def stop(self):
         self.velocity.x = 0
     
+    # DEPRECATED
     def jump(self):
         #temporary jump mechanics
         if self.on_ground:
@@ -895,6 +1049,7 @@ class Barrel(Instance):
             self.on_ground = False
             
     def border_reached(self):
+        # switch directions if the barrel reaches the side of the screen
         if self.move_direction == LEFT:
             self.move_direction = RIGHT
         
@@ -903,7 +1058,8 @@ class Barrel(Instance):
                 self.move_direction = LEFT
 
     def choose_animation_state(self, dt):
-
+        # chooses animation to display based on conditions like whether it is climbing down a ladder
+        # or not
         if not self.isClimbing:
             self.current_animation = self.animations["SIDE"]
             
@@ -921,6 +1077,7 @@ class Barrel(Instance):
             return
     
     def display(self, dt=0):
+        # display the barrel
         if GAME_STATE != 4:
             self.choose_animation_state(dt + (1/frameRate))
             self.current_animation.update(dt + (1/frameRate))
@@ -930,7 +1087,9 @@ class Barrel(Instance):
         #circle(self.position.x, self.position.y, self.height)
         
 class BlueBarrel(Instance): 
-    #The class only takes the initial position as a vector as arguments.
+    #Same as the barrel class except it moves faster and
+    # spawns in a FireSpirit if it reaches the burning oil at the start
+    
     def __init__(self, P=Vector2(0,0)):
         
         Instance.__init__(self, "Barrel", Enum["ENUM_TYPE"]["BARREL"], False, True)
@@ -960,8 +1119,29 @@ class BlueBarrel(Instance):
             "FRONT": Animation(barrel_blue_roll_front, 32, 32, RIGHT, 2)
         }
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
+        self.current_animation = self.animations["FRONT"]
+        
+        self.isStart = False # If the barrel is the first barrel dropped
 
     def update(self, dt):
+        
+        if self.isStart:
+            if self.position.y >= BOARD_H - 32:
+                self.isStart = False
+                self.speed = 200
+                self.anchored = False
+                self.move_direction = LEFT
+                
+                
+            elif self.position.y >= BOARD_H:
+                fs = FireSpirit(Vector2(100, BOARD_H - 32))
+                game.Workspace.AddChild(fs)
+            else:
+                self.current_animation = self.animations["FRONT"]
+                self.anchored = True
+                self.BASE_POINT = BOARD_H
+                self.position.y += 150 * dt
+                return
         
         if random.randint(0, 1000) > 998:
             self.climbDirection = DOWN
@@ -1065,7 +1245,7 @@ class BlueBarrel(Instance):
 
     def choose_animation_state(self, dt):
         
-        if not self.isClimbing:
+        if not self.isClimbing and not self.isStart:
             self.current_animation = self.animations["SIDE"]
             
             if self.move_direction == LEFT:
@@ -1092,10 +1272,12 @@ class BlueBarrel(Instance):
         
 class FireSpirit(Instance): 
 
-    #The class only takes the initial position as a vector as arguments.
+    # an entity that moves erraticaly and can climb up ladders to
+    # defeat the player on contact
+    
     def __init__(self, P=None):
         
-        Instance.__init__(self, "Player", Enum["ENUM_TYPE"]["BARREL"], False, True)
+        Instance.__init__(self, "FireSpirit", Enum["ENUM_TYPE"]["BARREL"], False, True)
         
         self.position = P
         
@@ -1132,6 +1314,8 @@ class FireSpirit(Instance):
 
 
     def update(self, dt):
+        
+        # randomly choose move directio and whether to climb a ladder or not
 
         if random.randint(0, 1000) >= 999:
             self.climbDirection = UP
@@ -1269,9 +1453,17 @@ class FireSpirit(Instance):
         self.current_animation.update(dt + (1/frameRate))
         self.current_animation.play(self.position.x, self.position.y)
         
+class BlueSpirit(FireSpirit):
+    
+    def __init__(p=Vector2(0, 0)):
+        
+        FireSpirit.__init__(self, p)
+        self.current_animation = Animation(fire_sprit_blue, 32, 32, RIGHT, 2)
+        self.speed = 180
+        self.climb_velocity = 50
+        
 #Class For The Player
 class Player(Instance): 
-    #The class only takes the initial position as a vector as arguments.
     def __init__(self, P=None):
         
         Instance.__init__(self, "Player", Enum["ENUM_TYPE"]["PLAYER"], False, True)
@@ -1288,11 +1480,12 @@ class Player(Instance):
         self.climbDirection = None
         self.isClimbing = False
         #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
-        self.speed = 120
+        self.speed = 240 #120
         self.jump_force  = -130
-        self.climb_velocity = 30
+        self.climb_velocity = 60 #30
         
-        self.BASE_POINT = BOARD_H
+        self.BASE_POINT = BOARD_H # the point where the player's foot is, used in collision detection
+                                  # to stop player from constantly falling down
         
         self.move_direction = LEFT
         #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
@@ -1316,7 +1509,13 @@ class Player(Instance):
         self.current_animation = self.animations["IDLE"]
         self.direction = RIGHT
         
-        self.barrel_score_debounce = 0
+        self.barrel_score_debounce = 0 # used to give player a score for jumping over a
+                                       # barrel with a 0.5 second debounce. this tracks
+                                       # elapsed time
+        
+        # SFX
+        
+        self.jump_sfx = Sound("JUMP_SFX", False) # jump sound effect
 
     def choose_animation_state(self, dt):
         
@@ -1359,10 +1558,8 @@ class Player(Instance):
             self.current_animation.direction = self.direction
             return
 
-        
-
-
     def update(self, dt):
+        # responsibel for calculating physics, collisions, and movement, etc.
         
         global SCORE
         
@@ -1372,13 +1569,15 @@ class Player(Instance):
         self.velocity.y += game.Workspace.gravity * dt * (1-self.anchored)
         #update position
         self.position.y += self.velocity.y * dt * (1-self.anchored)
-
+                    
+        # if player has hammer, update hammer duration and collider accordingly
         if self.has_hammer:
             self.hammer_time -= dt
             if self.hammer_time <= 0:
                 self.has_hammer = False
                 self.collider.l = 10
         
+        # prevents player from walking off the sides of the screen
         if self.position.x + self.velocity.x * dt < self.collider.l:
             self.position.x = self.collider.l * (1-self.anchored)
             
@@ -1389,7 +1588,7 @@ class Player(Instance):
             self.position.x += self.velocity.x * dt * (1-self.anchored)
         
 
-        # ground collision (temporary)
+        # ground collision
         if self.position.y + self.height/2 > self.BASE_POINT and self.anchored == False:
             self.position.y = self.BASE_POINT - self.height/2
             self.velocity.y = 0
@@ -1399,7 +1598,8 @@ class Player(Instance):
             
         self.collider.position = self.position
         
-        for child in game.Workspace.GetChildren():        
+        for child in game.Workspace.GetChildren():   
+            # handles player ladder up and down mechanics.     
             
             if child.enum_type == Enum["ENUM_TYPE"]["LADDER"] and not self.has_hammer:
                 ladder = child
@@ -1457,6 +1657,7 @@ class Player(Instance):
                     global NUM_LIVES, DID_LOSE_LIFE, GAME_STATE, PLAYER_DEATH_TIMER
 
                     if not DID_LOSE_LIFE:
+                        #print("LIVES:",NUM_LIVES)
                         NUM_LIVES -= 1
                         DID_LOSE_LIFE = True
 
@@ -1466,14 +1667,14 @@ class Player(Instance):
                         self.isClimbing = False
                         self.climbDirection = None
 
-                        print(self.current_animation == self.animations["DIE_RIGHT"], self.current_animation == self.animations["DIE_LEFT"])
+                        #print(self.current_animation == self.animations["DIE_RIGHT"], self.current_animation == self.animations["DIE_LEFT"])
 
                         if self.direction == RIGHT:
                             self.current_animation = self.animations["DIE_RIGHT"]
-                            print("Fired! r")
+                            #print("Fired! r")
                         else:
                             self.current_animation = self.animations["DIE_LEFT"]
-                            print("Fired! l")
+                            #print("Fired! l")
 
                         PLAYER_DEATH_TIMER = 1.5 
                         GAME_STATE = 4
@@ -1497,6 +1698,9 @@ class Player(Instance):
                                 game.Workspace.AddChild(score_particle)
                         
                                 game.Debris.AddItem(score_particle, 1)
+                                
+                                game.score_give.Stop()
+                                game.score_give.Play()
                             
         self.collider.position = self.position  
 
@@ -1527,10 +1731,13 @@ class Player(Instance):
     def jump(self):
         #temporary jump mechanics
         if self.on_ground and not self.has_hammer:
+            self.jump_sfx.Halt()
             self.velocity.y += self.jump_force
             self.on_ground = False
+            self.jump_sfx.Play()
     
     def display(self, dt=0):
+        # displays the player with correct animation to display
         
         if self.velocity.x != 0:
             if self.velocity.x > 0:
@@ -1552,9 +1759,12 @@ class Player(Instance):
 
 #Class Platform
 class Platform(Instance):
+    #a platform drawn between two points.
     
-    #Intial variables that have 2 points as the initial points
     def __init__(self, P1=Vector2(0,100), P2=Vector2(BOARD_W,200), isBlue=False):
+        # This class is special, as it is the only Instance handled as a Ray2
+        # which means we can make platforms with finite length (modulo 16) 
+        # and in nearly any direction we want.
         
         Instance.__init__(self, "Platform", Enum["ENUM_TYPE"]["PLATFORM"], True, True)
         
@@ -1573,7 +1783,7 @@ class Platform(Instance):
     def update(self, dt):
         pass
     
-    #The draw funtions of the platform, where from the 2 points we create 15 pixels blocks. (this funciton can be used for vertical horizotnal and diagonal platforms.)
+    #The draw funtions of the platform, where from the 2 points we create 16 pixels blocks. (this funciton can be used for vertical horizotnal and diagonal platforms.)
     def display(self, dt=0):
         direction = self.P2 - self.P1;
         distance = direction.magnitude()
@@ -1591,8 +1801,12 @@ class Platform(Instance):
                 image(platform_blue, tile_position.x, tile_position.y, 32, 32, 0, 0, 32, 32)
                 
 class HiddenPlatform(Instance):
+    # sometimes, due to lag spikes, deltaTime (dt) can be large and cause glitches.
+    # HiddenPlatform is a second layer of glitch prevention placed under some platforms
+    # that prevents players from falling through platforms. They function similarly to
+    # regular platforms except that they are not rendered in physically, but have
+    # collision detection.
     
-    #Intial variables that have 2 points as the initial points
     def __init__(self, P1=Vector2(0,100), P2=Vector2(BOARD_W,200), isBlue=False):
         
         Instance.__init__(self, "Platform", Enum["ENUM_TYPE"]["PLATFORM"], True, True)
@@ -1616,6 +1830,8 @@ class GUI:
         self.start_menu = ["START GAME", "EXIT"]
         self.pause_menu = ["CONTINUE", "EXIT"]
         self.end_menu   = ["RETRY", "EXIT"]
+        
+        self.menu_sound = Sound("LOADING_SCREEN", True)
 
     def apply_menu_choice(self):
         global GAME_STATE
@@ -1646,9 +1862,9 @@ class GUI:
         # Alternate every 2 seconds (~120 frames)
         if (frameCount // 120) % 2 == 0:
             image(gui_kong_idle,
-                BOARD_W/2 - 100,
+                BOARD_W/2 - 96,
                 BOARD_H * 0.28 - 32,
-                200, 128, 0,0,192,128)
+                192, 128, 0,0,192,128)
         else:
             # Show pounding animation (2 frames, each 200x128)
             frame_width = 200
@@ -1681,7 +1897,7 @@ class GUI:
             else:
                 fill(255)
 
-            text(option, x - textWidth(option)/2, y)
+            text(option, x +1, y)
 
             # if i == self.selected:
             #     tw = textWidth(option)
@@ -1697,7 +1913,7 @@ class GUI:
         fill(0,150,255)
 
         title = "DONKEY KONG"
-        text(title, BOARD_W/2 - textWidth(title)/2, BOARD_H * 0.15)
+        text(title, BOARD_W/2 +1, BOARD_H * 0.15)
 
         self.draw_donkey_kong_animation()
         self.draw_menu(self.start_menu, BOARD_H * 0.60)
@@ -1709,19 +1925,25 @@ class GUI:
         fill(255)
 
         pause_text = "PAUSED"
-        text(pause_text, BOARD_W/2 - textWidth(pause_text)/2, BOARD_H*0.25)
+        text(pause_text, BOARD_W/2 +1, BOARD_H * 0.25)
 
         self.draw_menu(self.pause_menu, BOARD_H*0.55)
+
 
     # --- END SCREEN ---
     def draw_end(self):
         background(0)
+        
+        gameover = "GAME OVER"
 
         if DID_WIN:
             image(gui_princess_icon,
                 BOARD_W/2 - 36,
                 BOARD_H*0.18 - 64,
-                72, 128)
+                72, 128, 0, 0, 72-8, 128)
+            
+            gameover = "VICTORY"
+            self.end_menu = ["EXIT"]
         else:
             image(gui_mario_angel_icon,
                 BOARD_W/2 - 64,
@@ -1731,18 +1953,19 @@ class GUI:
         textFont(title_font)
         fill(255)
 
-        gameover = "GAME OVER"
-        text(gameover, BOARD_W/2 - textWidth(gameover)/2, BOARD_H*0.45)
+        
+        text(gameover, BOARD_W/2 +1, BOARD_H*0.45)
 
         textFont(menu_font)
 
         score_text = "FINAL SCORE " + str(SCORE)
-        text(score_text, BOARD_W/2 - textWidth(score_text)/2, BOARD_H*0.58)
+        text(score_text, BOARD_W/2 +1, BOARD_H*0.58)
 
         self.draw_menu(self.end_menu, BOARD_H*0.75)
 
     def handle_selection(self):
-        global GAME_STATE
+        global GAME_STATE, NUM_LIVES
+        
         current_menu = None      
         if GAME_STATE == 0:
             current_menu = self.start_menu
@@ -1753,9 +1976,18 @@ class GUI:
       
         if current_menu is not None:
             choice = current_menu[self.selected]
-      
-            if choice != "EXIT":
+            
+            #print(choice)
+            if choice == "START GAME" or choice == "CONTINUE":
                 GAME_STATE = 1
+            elif choice == "RETRY":
+                #DID_LOSE_LIFE = False
+                NUM_LIVES = 2
+                
+                GAME_STATE = 1
+                game.level = 1
+                reset_level()
+                
             elif choice == "EXIT":
                 self.quit_game()
         else:
@@ -1771,6 +2003,8 @@ class GUI:
         text(str(score).zfill(6), BOARD_W, 40)
         text("LIVES ", BOARD_W - 10, 60)
         text(str(lives).zfill(2), BOARD_W, 80)
+        
+        textAlign(CENTER, BASELINE)
 
     def menu_length(self):
         if GAME_STATE == 0:
@@ -1782,6 +2016,31 @@ class GUI:
         return 0
 
     def quit_game(self):
+        try:
+            for instance in game.Workspace.GetChildren():
+                game.Workspace.RemoveChild(instance)
+        except:
+            pass
+            
+        try:
+            del game
+        except:
+            pass
+            
+        try:
+            for i in GLOBAL_SOUNDS.values():
+                del i
+        except:
+            pass
+            
+        finally:
+            try:
+                del GLOBAL_SOUNDS
+                del audio_player
+                
+            except:
+                pass
+            
         exit()
 
     def display(self):
@@ -1794,40 +2053,48 @@ class GUI:
             self.draw_end()
                             
 class Game:
+    # The class that pipelines processes and handles the entire game's functionality.
     
     def __init__(self):
         
-        self.Workspace = Workspace(200)
-        self.Debris = Debris(self.Workspace)
+        self.Workspace = Workspace(200) # new Workspace
+        self.Debris = Debris(self.Workspace) # new DebrisService
         
-        self.__idle_threads = {}
-        self.__running_threads = {}
+        self.__idle_threads = {} # NOUSE
+        self.__running_threads = {} # NOUSE
         
-        self._PhysicsPipelineRunning = False
-        self._RenderPipelineRunning = False
+        self._PhysicsPipelineRunning = False # Protected flag for whether physics pipeline is running or not
+        self._RenderPipelineRunning = False # Protected flag for whether render pipeline is running or not
         
-        self.localPlayer = Player(Vector2(100, 550))
+        self.localPlayer = Player(Vector2(100, 550)) # the player.
         self.localPlayer.collider.collider_aura = 10
         
-        self.Workspace.AddChild(self.localPlayer)
+        self.Workspace.AddChild(self.localPlayer) # adds player to workspace manually
         
-        self.startpoint = Vector2(10, BOARD_H-50)
+        self.startpoint = Vector2(10, BOARD_H-50) # also used to destroy barrels when they reach the start
         
         self.barrel_spawn_interval = 4
         self.barrel_spawn_time = 0
         
-        self.blue_barrel_chance = 0.2 # Percent
+        self.blue_barrel_chance = 0.2 # Probability of KONG in spawning a blue barrel instead of regular barrel
         
-        self.level = 1
+        self.level = 1 # The current level of the game
         
         self.animations = {
             "DONKEY_KONG_IDLE": Animation(donkey_idle, 96, 64, RIGHT, 1),
             "DONKEY_KONG_BARREL_DROP": Animation(donkey_barrel_throw, 96, 64, RIGHT, 3),
             "DONKEY_KONG_BROWN_BARREL_DROP": Animation(donkey_brown_barrel_drop, 96, 64, RIGHT, 3),
             "DONKEY_KONG_BLUE_BARREL_DROP": Animation(donkey_blue_barrel_drop, 96, 64, RIGHT, 3),
-            "DONKEY_KONG_POUNDING": Animation(kong_pounding, 96, 64, RIGHT, 2)
+            "DONKEY_KONG_POUNDING": Animation(kong_pounding, 96, 64, RIGHT, 2),
+            
+            "DONKEY_KONG_CLIMBING": Animation(donkey_climbing_ladder, 96, 80, RIGHT, 4),
+            "DONKEY_KONG_DYING": Animation(donkey_dying, 96, 64, RIGHT, 3),
+            
+            "HEART": Animation(heart_rescaled, 32, 32, RIGHT, 1),
+            "BROKEN_HEART": Animation(broken_heart, 32, 32, RIGHT, 1)
         }
         
+        # Adjust speeds of the animations so they dont look weird
         self.animations["DONKEY_KONG_BARREL_DROP"].animation_speed = 1.5
         self.animations["DONKEY_KONG_BROWN_BARREL_DROP"].animation_speed = 1.5
         self.animations["DONKEY_KONG_BLUE_BARREL_DROP"].animation_speed = 1.5
@@ -1842,16 +2109,141 @@ class Game:
         
         self.burnt_barrels = 0
         
-        self.princess = Item(Vector2(240, 43), "PRINCESS", 30)
+        self.princess = Item(Vector2(240, 43), "PRINCESS", 30) # princess handled as an item as she has
+                                                               # limited in-game functionality.
         self.Workspace.AddChild(self.princess)
         
         self.kong_position = Vector2(100, 100)
         self.kong_animation_timer = 0
+        
+        self.timekeeper = 0 # keeps time for transitions like kong leaving a level and the final death animation of kong
+        self.transition_occuring = False
+        
+        self.last_spirit_spawn = 0
+        self.fire_spirit_count = 0
+        
+        # SFX
+        self.menu_sound = Sound("LOADING_SCREEN", True)
+        self.lvl1 = Sound("BACKGROUND_LEVEL_1", True)
+        self.lvl2 = Sound("BACKGROUND_LEVEL_2", True)
+        
+        self.item_collect = Sound("ITEM_COLLECT", False)
+        self.score_give = Sound("SCORE_GIVE", False)
+        
+        self.lvl2_end = Sound("LEVEL_2_END", False)
+        
+    def Level1ExitAnim(self, dt):
+        global LEVEL
+        # the animation of Kong grabbing Princess
+        # and moving to level 2
+        
+        self.transition_occuring = True
+        
+        self.timekeeper += dt
+        
+        self.lvl1.Stop()
+        
+        self.current_donkey_animation = self.animations["DONKEY_KONG_IDLE"]
+        
+        if self.timekeeper < 3:
+            self.animations["HEART"].play(300, 30)
+        elif self.timekeeper < 6:
+        
+            self.current_donkey_animation = self.animations["DONKEY_KONG_CLIMBING"]
+            
+            self.animations["BROKEN_HEART"].play(300, 30)
+            
+            self.princess.position = Vector2(1000, 1000)
+            self.kong_position = Vector2(197, self.kong_position.y - 50*dt)
+            
+        else:
+            
+            LEVEL = 2
+            game.localPlayer.position = Vector2(1000, 1000)
+            reset_level()
+            self.timekeeper = 0
+            self.transition_occuring = False
+        
+            
+    def Level2ExitAnim(self, dt):
+        # the animation of kong falling to his death
+        global GAME_STATE, DID_WIN
+        
+        self.transition_occuring = True
+        
+        self.timekeeper += dt
+        
+        if self.lvl2.IsPlaying:
+            self.lvl2.Halt()
+        
+        if self.timekeeper < 3:
+            self.current_donkey_animation = self.animations["DONKEY_KONG_POUNDING"]
+        elif self.timekeeper < 5:
+        
+            self.current_donkey_animation = self.animations["DONKEY_KONG_IDLE"]
+            
+            self.Workspace.GetChild(5).P1.y = BOARD_H - 32
+            self.Workspace.GetChild(5).P2.y = BOARD_H - 32
+            
+            self.Workspace.GetChild(11).P1.y = BOARD_H - 16*3
+            self.Workspace.GetChild(11).P2.y = BOARD_H - 16*3
+            
+            self.Workspace.GetChild(17).P1.y = BOARD_H - 16*4
+            self.Workspace.GetChild(17).P2.y = BOARD_H - 16*4
+            
+            self.Workspace.GetChild(23).P1.y = BOARD_H - 16*5
+            self.Workspace.GetChild(23).P2.y = BOARD_H - 16*5
+            
+            if self.Workspace.GetChild(36):
+                self.Workspace.RemoveChild(self.Workspace.GetChild(36))
+                self.Workspace.RemoveChild(self.Workspace.GetChild(39))
+                self.Workspace.RemoveChild(self.Workspace.GetChild(40))
+                
+                self.Workspace.RemoveChild(self.Workspace.GetChild(43))
+                self.Workspace.RemoveChild(self.Workspace.GetChild(46))
+                self.Workspace.RemoveChild(self.Workspace.GetChild(47))
+                
+            for child in game.Workspace.GetChildren():
+                
+                if child.enum_type == Enum["ENUM_TYPE"]["BARREL"] or child.enum_type == Enum["ENUM_TYPE"]["ITEM"] and child.type != "PRINCESS":
+                    game.Workspace.RemoveChild(child)
+        
+        elif self.kong_position.y < BOARD_H - 112:
+            
+            if not self.lvl2_end.IsPlaying:
+                self.lvl2_end.Play()
+            
+            self.current_donkey_animation = self.animations["DONKEY_KONG_DYING"]
+            self.princess.position = Vector2(300, 118)
+            
+            if self.kong_position.y >= BOARD_H - 112:
+                self.kong_position = Vector2(self.kong_position.x, BOARD_H - 112)
+                
+            else:
+                self.kong_position = Vector2(self.kong_position.x, self.kong_position.y + 100*dt)
+                
+        elif self.timekeeper < 11:
+            self.Workspace.GetChild(27).P1.y = BOARD_H - 16 - 96*4
+            self.Workspace.GetChild(27).P2.y = BOARD_H - 16 - 96*4
+            
+            #print(BOARD_H - 16 - 96*4 - 28)
+            self.princess.position = Vector2(300, BOARD_H - 16 - 96*4 - 28)
+            
+            self.localPlayer.position.x = 380
+            self.localPlayer.position.y = BOARD_H - 16 - 96*4 - 16
+            
+            self.localPlayer.direction = LEFT
+            
+            self.animations["HEART"].play(340, 200)
+            
+        else:
+            GAME_STATE = 3
+            DID_WIN = True
     
     def handle_player_death(self, dt):
-        global GAME_STATE, PLAYER_DEATH_TIMER, DID_LOSE_LIFE, NUM_LIVES
+        global GAME_STATE, PLAYER_DEATH_TIMER, DID_LOSE_LIFE, NUM_LIVES, SCORE
 
-
+        SCORE = 0
         fixed_dt = 1.0 / 60.0
         
         #ANIMATION PART
@@ -1862,10 +2254,10 @@ class Game:
 
         # Count down timer with real dt
         PLAYER_DEATH_TIMER -= dt
-        print("Is this even called", PLAYER_DEATH_TIMER)
+        #print("Is this even called", PLAYER_DEATH_TIMER)
         if PLAYER_DEATH_TIMER <= 0:
             DID_LOSE_LIFE = False
-            print("calling broo")
+            #print("calling broo")
            
             if NUM_LIVES <= 0:
                 GAME_STATE = 3
@@ -1873,7 +2265,35 @@ class Game:
             
             GAME_STATE = 1
             reset_level()
+            
+    def getScrewCount(self):
+        # for level 2, returns the number of screws that are
+        # currently in Workspace
+        
+        count = 0
+        
+        for child in game.Workspace.GetChildren():
+                
+            if child.enum_type == Enum["ENUM_TYPE"]["SCREW"]:
+                count += 1
+        
+        return count  
+    
+    # DEPRECATED
+    def getFireSpiritCount(self):
+        # for level 2, returns the number of FireSpirits 
+        # that are currently in Workspace
+        
+        count = 0
+        
+        for child in game.Workspace.GetChildren():
+                
+            if child.name == "FireSpirit":
+                count += 1
+        
+        return count  
 
+    # WARNING: HERE BE PIPELINES!
     def PreSimulation(self, dt):
         # Preproccesing for physics simulation
         
@@ -1887,9 +2307,19 @@ class Game:
                 self.blue_barrel_chance = 0.35
                 
                 game.oil_barrel_item.animations["FIRE_BIG"].animation_speed = 0.15
+        
+        
+        if self.level == 2 and self.fire_spirit_count < 5 and not game.transition_occuring:
+            self.last_spirit_spawn -= (dt)
+            if self.last_spirit_spawn <= 0:
+                self.fire_spirit_count += 1
+                self.last_spirit_spawn = 3
+                fs = FireSpirit(self.kong_position)
+                game.Workspace.AddChild(fs)
         pass
         
     def Simulation(self, dt):
+        # the actual physics and core mechanics processing
         
         global SCORE
         
@@ -1906,9 +2336,13 @@ class Game:
             game.handle_player_death(time.time() - Timestamp)
             return
         
+        if self.transition_occuring:
+            return
+        
         for i in self.Workspace.GetChildren():
             if True:
                 if i.enum_type == Enum["ENUM_TYPE"]["PLAYER"] or i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
+                    # update the BASE_POINT for every object affected by platforms
                     origin = Vector2(i.position.x, i.position.y + i.collider.l/2)
                     direction = Vector2(0, 1)
 
@@ -1917,15 +2351,19 @@ class Game:
                     if intersection:
                         i.BASE_POINT = intersection.y  - i.collider.collider_aura/2
                     
-                i.update(dt)
+                i.update(dt) # call local update method for instance 'i'
                 
                 if i.enum_type == Enum["ENUM_TYPE"]["ITEM"]:
+                    # player collected an item that is a hammer.
                     if i.collider.circle_collision(game.localPlayer.collider, i.collider):
                         #print("PLAYER PICKED", i.type)
 
                         if i.type == "HAMMER" and not game.localPlayer.has_hammer:
                             game.localPlayer.has_hammer = True
-                            game.localPlayer.hammer_time = 12
+                            game.localPlayer.hammer_time = 9
+                            
+                            self.item_collect.Stop()
+                            self.item_collect.Play()
                             #game.localPlayer.collider.l = game.localPlayer.hammer_radius
                             
                             
@@ -1933,6 +2371,7 @@ class Game:
                             self.Workspace.RemoveChild(i)
                 if game.localPlayer.has_hammer and i.enum_type == Enum["ENUM_TYPE"]["BARREL"]:
                     if i.collider.circle_collision(Collider(Enum["COLLIDER_TYPE"]["CIRCLE"], game.localPlayer.position, game.localPlayer.hammer_radius), i.collider):
+                        # give points when player defeats Barrel or BlueBarrel with hammer
                         
                         if isinstance(i, Barrel) or isinstance(i, BlueBarrel):
                             SCORE += 500
@@ -1948,8 +2387,13 @@ class Game:
                             self.Debris.AddItem(score_particle, 1)
                         
                             self.Workspace.RemoveChild(i)
+                            
+                            self.score_give.Stop()
+                            self.score_give.Play()
                         
                         elif isinstance(i, FireSpirit):
+                            # give points when player defeats FireSpirit with hammer
+                            
                             SCORE += 800
                         
                             destroy_particle = Item(i.position, "BARREL_DESTROY_PARTICLE", 30)
@@ -1964,51 +2408,13 @@ class Game:
                         
                             self.Workspace.RemoveChild(i)
                             
+                            self.fire_spirit_count -= 1
+                            
+                            self.score_give.Stop()
+                            self.score_give.Play()
+                            
         if game.localPlayer.position.x <=225 and game.localPlayer.position.y <= 130:
-            print("OUT_OF_BOUNDS")
-                    
-        
-        if True:
-            return
-        
-        while collision_detected:
-            collision_detected = False
-            for i in self.Workspace.GetChildren():
-                
-                if not i.anchored and not updated_instances.get(i.objectId, False):
-                    i.update(dt)
-                    updated_instances[i.objectId] = True
-                
-                for v in self.Workspace.GetChildren():
-                    
-                    
-                    if i.objectId != v.objectId:
-                        
-                        if not v.anchored and not updated_instances.get(v.objectId, False):
-                            v.update(dt)
-                            updated_instances.set(v.objectId, True)
-                            
-                        if i.collider.collider_type == Enum["COLLIDER_TYPE"]["LINE"] and v.collider.collider_type == Enum["COLLIDER_TYPE"]["CIRCLE"]:
-                            
-                            ret = v.collider.ray2_intersected(i.collider.position)
-                            
-                            if ret:
-                                if len(ret) >= 2:
-                                    collision_detected = True
-                                
-                                    #v.position = v.collider.retrace_ray2_collision(i.collider.position, v.velocity)
-                                    #v.collider.position = v.position
-                                    
-                                    # Raycast to determine v.BASE_POS
-                                    
-                                    origin = self.localPlayer.position
-                                    direction = Vector2(0, 1)
-                                    
-                                    intersection, target = self.Workspace.Raycast(Ray2(origin, direction, 10000))
-                                    #print(intersection)
-                                    
-                                    if intersection:
-                                        self.localPlayer.BASE_POINT = intersection.y  - self.localPlayer.collider.collider_aura/2
+            game.localPlayer.position.x = 225
                                                         
         
     def PostSimulation(self, dt):
@@ -2032,14 +2438,16 @@ class Game:
         pass
         
     def PreRender(self, dt):
-        # Preprocessing for the frame to render, such as setting up the threads, etc.
+        # Preprocessing for the frame to render, like updating animaton states, etc..
+        
         background(0)
+        
+        if self.transition_occuring:
+            return
        
         if random.randint(0, 1000) <= 2:
             self.princess.state = 1
         
-       
-
         self.barrel_spawn_time += dt
         if self.barrel_spawn_time >= self.barrel_spawn_interval and self.level == 1:
             
@@ -2095,7 +2503,30 @@ class Game:
                 
         
     def Render(self, dt):
-        # Iterate through objects in Game.Workspace and do the honors, run every thread here
+        # Iterate through objects in Game.Workspace and do the honors
+            
+        if GAME_STATE == 0 or GAME_STATE == 2 or GAME_STATE == 3:
+            if not self.menu_sound.IsPlaying:
+                self.menu_sound.Play()
+                
+        else:
+            self.menu_sound.Halt()
+            
+        if GAME_STATE == 1 or GAME_STATE == 4 and not game.localPlayer.has_hammer:
+            
+            if game.level == 1:
+                if not self.lvl1.IsPlaying:
+                    self.lvl2.Halt()
+                    self.lvl1.Play()
+                
+            else:
+                if not self.lvl2.IsPlaying and not self.transition_occuring:
+                    self.lvl1.Halt()
+                    self.lvl2.Play()
+                
+        else:
+            self.lvl1.Halt()
+            self.lvl2.Halt()
         
         if GAME_STATE != 1 and GAME_STATE != 4:
             gui.display()
@@ -2104,6 +2535,8 @@ class Game:
        
         if GAME_STATE == 1 or GAME_STATE == 4:
             gui.draw_hud(SCORE, NUM_LIVES)
+            
+            
             pass
         
         for i in self.Workspace.GetChildren():
@@ -2116,6 +2549,14 @@ class Game:
         self.current_donkey_animation.play(self.kong_position.x, self.kong_position.y)
         
         self.localPlayer.display(dt)
+        
+        if game.level == 1 and 346 >= game.localPlayer.position.x >= 230 and game.localPlayer.position.y <= 70:
+            self.Level1ExitAnim(dt)
+            return
+        
+        if game.level == 2 and game.getScrewCount() <= 0:
+            self.Level2ExitAnim(dt)
+            return
         
         #self.__running_threads[self.localPlayer.objectId] = threading.Thread(target = self.localPlayer.display, args = (dt))
         #self.__running_threads[self.localPlayer.objectId].start()
@@ -2133,10 +2574,11 @@ class Game:
             
         self._RenderPipelineRunning = False
 
-#Creating the testing class Player and platforms.
+#Creating the classes for the game and interfaces.
 game = Game()
 gui = GUI()
 
+# build the level and its objects on demand with these methods
 def assemble_level_1():
     
     game.level = 1
@@ -2160,10 +2602,14 @@ def assemble_level_1():
         
         Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320))
     ]
+    start_barrel = BlueBarrel(Vector2(100, 100))
+    start_barrel.speed = 0
+    start_barrel.canCollide = False
+    start_barrel.isStart = True
 
     Obstacles = [
         #Barrel(Vector2(100, 0)),
-        #BlueBarrel(Vector2(100, 0)),
+        start_barrel,
         #FireSpirit(Vector2(100, 0))
     ]
 
@@ -2260,7 +2706,7 @@ def assemble_level_2():
         Platform(Vector2(408, BOARD_H - 16-96*4), Vector2(496-72, BOARD_H - 16-96*4), True),
         HiddenPlatform(Vector2(408, BOARD_H - 16-96*4+1), Vector2(504-48, BOARD_H - 16-96*4+1)),
         
-        Platform(Vector2(120 + 48, BOARD_H - 16-96*5), Vector2(384 - 24, BOARD_H - 16-96*5), True),
+        Platform(Vector2(120 + 32, BOARD_H - 16-96*5), Vector2(384 - 8, BOARD_H - 16-96*5), True),
         HiddenPlatform(Vector2(128 + 48, BOARD_H - 16-96*4+1), Vector2(384+8, BOARD_H - 16-96*4+1)),
         
         Platform(Vector2(-16, -320), Vector2(BOARD_W+16, -320), True)
@@ -2281,8 +2727,11 @@ def assemble_level_2():
         p.collider.position.direction = (p.P2 - p.P1).unit()
         p.collider.position.magnitude = (p.P2 - p.P1).magnitude()
         
+        
     for b in Obstacles:
         game.Workspace.AddChild(b)
+        
+    game.fire_spirit_count = 5
         
 
     Ladders = [
@@ -2351,38 +2800,29 @@ def assemble_level_2():
     for sb in static_barrels:
         game.Workspace.AddChild(sb)
 
+# build level
 assemble_level_1()
 
+# used to calculate deltaTime (dt) to handle physics and renders
 Timestamp = time.time()
 
+# reset the level and other player attributes entirely
 def reset_level():
-    global game
+    global game, SCORE
 
-    for obj in list(game.Workspace.GetChildren()):
-        game.Workspace.RemoveChild(obj)
-
-    game.localPlayer = Player(Vector2(100, 550))
-    game.localPlayer.collider.collider_aura = 10
-    game.Workspace.AddChild(game.localPlayer)
-
-    game.barrel_spawn_time = 0
-    game.burnt_barrels = 0
-    game.new_barrel_type = None
-    game.new_barrel_obj = None
-
+    del game
+    game = Game()
+    
+    game.level = LEVEL
+    
     if game.level == 1:
         assemble_level_1()
     else:
         assemble_level_2()
+        game.princess.position = Vector2(300, 118)
 
-    game.localPlayer.velocity = Vector2(0, 0)
-    game.localPlayer.anchored = False
-    game.localPlayer.isClimbing = False
-    game.localPlayer.climbDirection = None
-    game.localPlayer.has_hammer = False
-    game.localPlayer.current_animation = game.localPlayer.animations["IDLE"]
 
-#temporary game input for player
+#game input for player
 def keyPressed():
     global GAME_STATE
 
@@ -2396,6 +2836,9 @@ def keyPressed():
         elif keyCode == UP:
             gui.selected = (gui.selected - 1) % gui.menu_length()
     elif GAME_STATE == 1:
+        
+        if game.transition_occuring:
+            return
 
         if keyCode == LEFT:
             game.localPlayer.move_left()
@@ -2417,13 +2860,12 @@ def keyReleased():
         game.localPlayer.climbDirection = None
     if keyCode == DOWN:
         game.localPlayer.climbDirection = None
-
+        
 def draw():
     # Physics pipeline first (no multi-threading)
      
     global Timestamp
-    
-    
+       
 
     if not game._PhysicsPipelineRunning:
         game._PhysicsPipelineRunning = True
