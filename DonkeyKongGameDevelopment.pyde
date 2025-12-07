@@ -7,6 +7,16 @@ import os
 ###
 """
 Notes from the Developers:
+
+    Site Used For Sprites
+
+    https://www.mariowiki.com/Category:Donkey_Kong_(game)_assets
+
+    Site Used For Music
+
+    https://downloads.khinsider.com/game-soundtracks/album/donkey-kong-arcade
+    https://sounds.spriters-resource.com/arcade/dk/asset/447149/
+    https://themushroomkingdom.net/media/smb/wav
     
     ...
 """
@@ -15,7 +25,7 @@ Notes from the Developers:
 #Board Global Variables and AudioPlayer
 
 audio_player = Minim(this)
-
+#
 BOARD_W = int(224*2.5)
 BOARD_H = int(256*2.5)
 BACKGROUND_COLOR = 000
@@ -130,10 +140,11 @@ hud_font = None
 def setup():
     # Placeholder for Processing setup; currently unused
     global GAME_STATE
-    
+    #Setting Up The Frame Rate, size of the board, background color.
     frameRate(50)
     size(BOARD_W, BOARD_H)
     background(BACKGROUND_COLOR)
+    #Setting the custom font.
     global title_font, menu_font, hud_font
     title_font = createFont("kong_arcade_font.TTF", 72)
     menu_font  = createFont("kong_arcade_font.TTF", 32)
@@ -171,7 +182,7 @@ class Vector:
     
     def __init__(self):
         pass
-    
+
 class Vector2(Vector):
     # A vector with two components, x and y
     
@@ -394,7 +405,7 @@ class Service:
               
 class Instance:
     # the base class for Instances, basically almost every object you see rendered in the game. 
-    
+
     def __init__(self, name, EnumType, anchored = False, canCollide = True):
         self.name = name
         self.enum_type = EnumType
@@ -488,9 +499,13 @@ class Animation:
             return
         self.animation_timer += dt
 
+        
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0
-            if GAME_STATE == 4:   # death animation mode
+           
+            #The special case when the game state is 4 (when the game is paused), the only animation that will play once is the super mario dying untill the end of the animation.
+
+            if GAME_STATE == 4:  
                 if self.slice < self.total_slices - 1:
                     self.slice += 1
                 # else: remain on last frame (do NOT loop)
@@ -501,6 +516,7 @@ class Animation:
         # Displays the animation's current slice with directionality
         # taken into account.
         
+        #Depending on the direction, we crop the picture frames so the player can be orianted correspoidng to arrow keys.
         if self.direction == RIGHT:
             image(self.sprite, xPosition - self.img_w // 2, yPositon - self.img_h // 2, self.img_w, self.img_h, self.slice * (self.img_w+4), 0, (self.slice) * (self.img_w+4) + self.img_w, self.img_h)
         elif self.direction == LEFT:
@@ -661,6 +677,8 @@ class Screw(Instance):
 
         # Check collision with player — but only if showing
         if self.isShowing:
+            # Check if player is touching TOP of the screw, if he is then we change the state isShowing so later we can use this boolean to decide if the player has beeten level 2.
+            # Player must be slightly ABOVE the screw
             player = game.localPlayer
             if self.collider.circle_collision(self.collider, player.collider):
                 # Check if player is touching TOP of the screw
@@ -669,7 +687,7 @@ class Screw(Instance):
                 game.Workspace.RemoveChild(self)
 
     def display(self, dt=0):
-        # Display the screw...
+        # Display the screw.
         if self.isShowing:
             image(screw, self.position.x, self.position.y+20, 24, 24, 0, 0, 30, 32)
             
@@ -696,9 +714,8 @@ class PrincessPickup(Instance):
         if self.isShowing:
             player = game.localPlayer
             if self.collider.circle_collision(self.collider, player.collider):
-                # Check if player is touching TOP of the screw
 
-                # Player must be slightly ABOVE the screw
+                #Checking if the position of the player are in distance of 40 pixels.
                 if abs(player.position.x - self.position.x) < 40 and abs(player.position.y - self.position.y) < 40:
                     self.isShowing = False
                     self.active = False  
@@ -707,12 +724,13 @@ class PrincessPickup(Instance):
                     game.Workspace.AddChild(score_particle)
                     game.Debris.AddItem(score_particle, 1)
                     game.Workspace.RemoveChild(self)
-                    
                     game.item_collect.Stop()
                     game.item_collect.Play()
 
-
+    
     def display(self, dt=0):
+        
+        #Determening what pickup item is going to be displayed.
         if self.isShowing:
             if self.type == 0:
                 image(first_princess_pickup_item, self.position.x, self.position.y, 32, 32, 0, 0, 30, 32)
@@ -733,6 +751,7 @@ class HalfLadder(Instance):
         self.bottom_pos = None
         self.height = 0
         self.rect_pos = None
+        #We made the function where we put a random cordinate, and it sends 2 rays one up one down. One ray hits the top of the bottom platform, one ray hits the botttom of the top platform and that is how we calculate the top and bottom positions.
         def compute_ladder_bounds():
             if self.raycast_function is None:
                 return
@@ -758,24 +777,29 @@ class HalfLadder(Instance):
                 self.height = abs(self.top_pos.y - self.bottom_pos.y)
                 self.rect_pos = Vector2(self.position.x - self.width/2, self.top_pos.y)
         compute_ladder_bounds()
-        
+    
+    
     def update(self, dt):
         pass
     
-    
     def display(self, dt=0):
+
+        #The ladder is a vector, when we have the first and end position we divide the final vector by 32 the size of the ladder image, and then we spawn in the ladders acordingly.  
+        #The thing that we change is that in the middle the code skips rendering in ladders, but theoretically the ladder vector is there.
+
         if self.rect_pos and self.height > 0:
             number_of_ladders = int(self.height // 32)
+            
             if self.height % 32 > 0:
                 number_of_ladders += 1
-            #middle_start = number_of_ladders // 3            
-            #middle_end = (number_of_ladders * 2) // 3
             
+
             for num in range(0, number_of_ladders):
                 if num == number_of_ladders // 2:
                     pass
                 else:
                     image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
+    
     
 class Ladder(Instance):
     
@@ -788,6 +812,7 @@ class Ladder(Instance):
         self.bottom_pos = None
         self.height = 0
         self.rect_pos = None
+        #We made the function where we put a random cordinate, and it sends 2 rays one up one down. One ray hits the top of the bottom platform, one ray hits the botttom of the top platform and that is how we calculate the top and bottom positions.
         def compute_ladder_bounds():
             if self.raycast_function is None:
                 return
@@ -817,15 +842,17 @@ class Ladder(Instance):
     def update(self, dt):
         pass
     
-    
+     
     def display(self, dt=0):
+        #The ladder is a vector, when we have the first and end position we divide the final vector by 32 the size of the ladder image, and then we spawn in the ladders acordingly.  
         if self.rect_pos and self.height > 0:
             number_of_ladders = int(self.height // 32)
             if self.height % 32 > 0:
                 number_of_ladders += 1
-                
+            
             for num in range(0, number_of_ladders):
                 
+                #If it's the second level then we display the yellow ladder, otherwise we display the white ladder.
                 if game.level == 2:
                     image(ladder_yellow, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
                     
@@ -833,8 +860,9 @@ class Ladder(Instance):
                     image(ladder_image, self.rect_pos.x-8, self.rect_pos.y + (num *32),32, 32, 0, 0, 32, 32)
             
 class Item(Instance):
+
     # A stationary object whose entire purpose is to be rendered and
-    # cease to exist when collected
+    # Cease to exist when collected 
     
     def __init__(self, P=Vector2(0,0), type="HAMMER", radius=30):
         Instance.__init__(self, "Item", Enum["ENUM_TYPE"]["ITEM"], True, False)
@@ -845,7 +873,8 @@ class Item(Instance):
         self.type = type
         self.state = 0
         
-        self.animations = { # dictionary of Animations
+        # Dictionary of Animations
+        self.animations = { 
             "HAMMER": Animation(hammer_item, 32, 32, RIGHT, 1),
             "OIL_BARREL": Animation(oil_barrel, 32, 32, RIGHT, 1),
             "FIRE_SMALL": Animation(fire_small, 32, 32, RIGHT, 2),
@@ -868,7 +897,7 @@ class Item(Instance):
         
         if self.type == "HAMMER":
             self.animations["HAMMER"].play(self.position.x, self.position.y)
-            
+    
         elif self.type == "OIL_BARREL":
             if self.state == 0:
                 self.animations["FIRE_SMALL"].update(dt + 1/frameRate)
@@ -1470,6 +1499,7 @@ class Player(Instance):
         
         self.position = P
         
+        #Setting the size of the player;
         self.width = 20
         self.height = 20
         
@@ -1479,22 +1509,24 @@ class Player(Instance):
         self.on_ground = False
         self.climbDirection = None
         self.isClimbing = False
-        #Consants that represent the speed of the player moving right and left, gravity forces in numbers..
-        self.speed = 240 #120
+        #Consants that represent the speed of the player moving right and left, gravity forces in numbers.
+        #Usuall speed-> 120
+        self.speed = 240 
         self.jump_force  = -130
-        self.climb_velocity = 60 #30
+        #Usuall speed-> 30
+        self.climb_velocity = 60
         
-        self.BASE_POINT = BOARD_H # the point where the player's foot is, used in collision detection
-                                  # to stop player from constantly falling down
-        
+        # The point where the player's foot is, used in collision detection
+        # To stop player from constantly falling down
+        self.BASE_POINT = BOARD_H 
+       
         self.move_direction = LEFT
-        #self.gravity = 0.5 NO NEED, WORKSPACE HANDLES GRAVITY
         
         self.has_hammer = False
         self.hammer_time = 0
         self.hammer_radius = 50
 
-        #sprite=None, imageW=32, imageH=32, direction=None, total_slices=0
+        # Setting The Animation For Mario
         self.animations = {
             "WALK": Animation(mario_running, 32, 32, RIGHT, 3),
             "CLIMB": Animation(mario_climbing_ladder, 32, 32, None, 2),
@@ -1506,19 +1538,21 @@ class Player(Instance):
             "DIE_LEFT": Animation(mario_dying_left, 32, 32, None, 5)
         }
 
+        # Used to give player a score for jumping over a
+        # Barrel with a 0.5 second debounce. this tracks
+        # Elapsed time
+        
         self.current_animation = self.animations["IDLE"]
         self.direction = RIGHT
+        self.barrel_score_debounce = 0 
         
-        self.barrel_score_debounce = 0 # used to give player a score for jumping over a
-                                       # barrel with a 0.5 second debounce. this tracks
-                                       # elapsed time
         
         # SFX
-        
         self.jump_sfx = Sound("JUMP_SFX", False) # jump sound effect
 
     def choose_animation_state(self, dt):
         
+        #We Stop All Animations If The Game State Is 4
         if GAME_STATE == 4:
             return
 
@@ -1532,7 +1566,8 @@ class Player(Instance):
                 self.current_animation.direction = self.direction
                 
             return
-       
+        
+        
         if self.isClimbing and self.climbDirection:
             self.animations["CLIMB"].total_slices = 2
             self.current_animation = self.animations["CLIMB"]
@@ -1729,7 +1764,8 @@ class Player(Instance):
         self.velocity.x = 0
     
     def jump(self):
-        #temporary jump mechanics
+        
+        #We make the jump mechanics not work if the player is in the sky, and if the player has a hammer.
         if self.on_ground and not self.has_hammer:
             self.jump_sfx.Halt()
             self.velocity.y += self.jump_force
@@ -1739,18 +1775,24 @@ class Player(Instance):
     def display(self, dt=0):
         # displays the player with correct animation to display
         
+        #if the player has a velocity of x then we display the walking animation
+        #Depending on the direction he has the walking animation that is right, and one that is left.
+
         if self.velocity.x != 0:
             if self.velocity.x > 0:
                 self.animations["WALK"].direction = RIGHT
             elif self.velocity.x < 0:
                 self.animations["WALK"].direction = LEFT
-                
+        #If the player does not have velocity x and velocity y then we play the idle animation.        
         elif self.velocity.x == 0 and self.velocity.y == 0:
             self.animations["IDLE"].direction = self.direction
         
+        #Part of the code where we call the animation function and we time it with the seconds from the rendering engine.
+
         self.choose_animation_state(dt + (1/frameRate))
         self.current_animation.update(dt + (1/frameRate))
-            
+        
+  
         if self.current_animation == self.animations["HAMMER_IDLE"] or self.current_animation == self.animations["HAMMER_WALK"]:
             self.current_animation.play(self.position.x, self.position.y-17)
         else:
@@ -1826,7 +1868,9 @@ class HiddenPlatform(Instance):
             
 class GUI:
     def __init__(self):
+        #What is the selected option (the index of the element that is chosen)
         self.selected = 0
+        #Lables for the 3 menus we have. (1 Start Menu Labels) (2 Pause Menu Labels) (3 Final Menu Label)
         self.start_menu = ["START GAME", "EXIT"]
         self.pause_menu = ["CONTINUE", "EXIT"]
         self.end_menu   = ["RETRY", "EXIT"]
@@ -1834,9 +1878,14 @@ class GUI:
         self.menu_sound = Sound("LOADING_SCREEN", True)
 
     def apply_menu_choice(self):
+       
+        #The main idea of the function is that on space the player chooses the menu option and depending on the label and the state diffrent actions follow.
+
         global GAME_STATE
         current_menu = None
 
+        #Depeding on the game state we display diffrent labels. 
+        
         if GAME_STATE == 0:
             current_menu = self.start_menu
         elif GAME_STATE == 2:
@@ -1844,18 +1893,22 @@ class GUI:
         elif GAME_STATE == 3:
             current_menu = self.end_menu
 
+        #Edge If Game State is none of the above then we stop the whole operation. 
+
         if current_menu is None:
             return  # No menu active, do nothing
 
-        choice = current_menu[self.selected]  # Get selected option
+        # Get selected option
+        choice = current_menu[self.selected]
 
-        # Change game state based on choice
+        # When the choice state is start game, continue, retry we put the game state to 1 which is the playing state.
         if choice in ("START GAME", "CONTINUE", "RETRY"):
-            GAME_STATE = 1  # Enter gameplay
+            GAME_STATE = 1  
+
+        # When the player chooses exit then we stop the program. 
+
         elif choice == "EXIT":
             self.quit_game()
-
-        #print("Menu choice:", choice, "| GAME_STATE now:", GAME_STATE)
 
 
     def draw_donkey_kong_animation(self):
@@ -1871,6 +1924,7 @@ class GUI:
             frame_height = 128
             current_frame = (frameCount // 15) % 2  # Slow toggle between 2 frames
 
+            #Donkey Kong Animation 
             sx = current_frame * frame_width
             sy = 0
 
@@ -1885,6 +1939,7 @@ class GUI:
 
     # Menu Drawer
     def draw_menu(self, items, base_y):
+        #Drawing the menu labels
         spacing = 55
         textFont(menu_font)
 
@@ -1899,14 +1954,8 @@ class GUI:
 
             text(option, x +1, y)
 
-            # if i == self.selected:
-            #     tw = textWidth(option)
-            #     image(gui_mario_hammer_icon,
-            #         x - tw/2 - 60,
-            #         y - 64,
-            #         64, 64)
+    # Start Screen GUI
 
-    # --- START SCREEN ---
     def draw_start(self):
         background(0)
         textFont(title_font)
@@ -1918,7 +1967,7 @@ class GUI:
         self.draw_donkey_kong_animation()
         self.draw_menu(self.start_menu, BOARD_H * 0.60)
 
-    # --- PAUSE SCREEN ---
+    # Pause Screen GUI
     def draw_pause(self):
         background(0)
         textFont(title_font)
@@ -1930,11 +1979,13 @@ class GUI:
         self.draw_menu(self.pause_menu, BOARD_H*0.55)
 
 
-    # --- END SCREEN ---
+    # End Screen GUI
     def draw_end(self):
         background(0)
         
         gameover = "GAME OVER"
+        
+        #If player has finished the level we display the princess, if he lost all of his lives then we display mario.
 
         if DID_WIN:
             image(gui_princess_icon,
@@ -1964,6 +2015,8 @@ class GUI:
         self.draw_menu(self.end_menu, BOARD_H*0.75)
 
     def handle_selection(self):
+        
+        #Function that handles selection of labels.
         global GAME_STATE, NUM_LIVES
         
         current_menu = None      
@@ -1977,11 +2030,9 @@ class GUI:
         if current_menu is not None:
             choice = current_menu[self.selected]
             
-            #print(choice)
             if choice == "START GAME" or choice == "CONTINUE":
                 GAME_STATE = 1
             elif choice == "RETRY":
-                #DID_LOSE_LIFE = False
                 NUM_LIVES = 2
                 
                 GAME_STATE = 1
@@ -1991,9 +2042,9 @@ class GUI:
             elif choice == "EXIT":
                 self.quit_game()
         else:
-            #print("  WARNING: current_menu is None for GAME_STATE:", GAME_STATE)
             pass
-
+    
+    #Function where we draw the hud for the game levels where we display the score and the lives.
     def draw_hud(self, score, lives):
         textFont(hud_font)
         fill(255)
@@ -2005,7 +2056,7 @@ class GUI:
         text(str(lives).zfill(2), BOARD_W, 80)
         
         textAlign(CENTER, BASELINE)
-
+    
     def menu_length(self):
         if GAME_STATE == 0:
             return len(self.start_menu)
@@ -2016,6 +2067,7 @@ class GUI:
         return 0
 
     def quit_game(self):
+
         try:
             for instance in game.Workspace.GetChildren():
                 game.Workspace.RemoveChild(instance)
@@ -2044,7 +2096,7 @@ class GUI:
         exit()
 
     def display(self):
-
+        
         if GAME_STATE == 0:
             self.draw_start()
         elif GAME_STATE == 2:
@@ -2671,6 +2723,7 @@ def assemble_level_1():
     for sb in static_barrels:
         game.Workspace.AddChild(sb)
         
+#Functoin that we call to spawn in static objects in the second level.
 def assemble_level_2():
     
     game.level = 2
@@ -2800,7 +2853,7 @@ def assemble_level_2():
     for sb in static_barrels:
         game.Workspace.AddChild(sb)
 
-# build level
+# build level on the start
 assemble_level_1()
 
 # used to calculate deltaTime (dt) to handle physics and renders
@@ -2836,10 +2889,14 @@ def keyPressed():
         elif keyCode == UP:
             gui.selected = (gui.selected - 1) % gui.menu_length()
     elif GAME_STATE == 1:
-        
+
+        # Handle Player Input When The Game State is 1.
+
         if game.transition_occuring:
             return
-
+       
+        #Player movement
+       
         if keyCode == LEFT:
             game.localPlayer.move_left()
         if keyCode == RIGHT:
@@ -2852,7 +2909,8 @@ def keyPressed():
             game.localPlayer.climbDirection = DOWN
         if keyCode == 80:  
             GAME_STATE = 2
-        
+
+#   When The Player releases we stop the running animations, going up the staircases.
 def keyReleased():
     if keyCode == LEFT or keyCode == RIGHT:
         game.localPlayer.stop()
@@ -2862,8 +2920,8 @@ def keyReleased():
         game.localPlayer.climbDirection = None
         
 def draw():
-    # Physics pipeline first (no multi-threading)
-     
+
+    # Physics pipeline first (no multi-threading) 
     global Timestamp
        
 
